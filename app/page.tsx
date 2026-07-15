@@ -79,12 +79,11 @@ const partialStartMonthAmount = (startText: string, quantity: number, unitPrice:
 const normalizeMidMonthInstallments = (contract: Contract) => {
   const startText = contract.displayStart || contract.signs[0]?.start || "";
   const start = startText ? new Date(startText + "T12:00:00") : null;
-  const quantity = contract.quantity || 1;
-  const unitPrice = contract.monthlyUnitPrice || 0;
+  const duration = contract.durationMonths || 0;
   const normal = contract.installments
     .filter((i) => i.kind === "installment")
     .sort((a, b) => a.due.localeCompare(b.due));
-  if (!start || start.getDate() !== 15 || !unitPrice || !normal.length)
+  if (!start || start.getDate() !== 15 || !normal.length || duration % 1 !== 0.5)
     return contract;
 
   const depositTotal = contract.installments
@@ -92,7 +91,7 @@ const normalizeMidMonthInstallments = (contract: Contract) => {
     .reduce((sum, i) => sum + i.amount, 0);
   const total = contract.installments.reduce((sum, i) => sum + i.amount, 0);
   const remaining = Math.max(0, total - depositTotal);
-  const fullMonth = quantity * unitPrice;
+  const fullMonth = total / duration;
   const halfMonth = Math.min(fullMonth * 0.5, remaining);
   const fullMonths = (remaining - halfMonth) / fullMonth;
   if (Math.abs(fullMonths - normal.length) > 0.01) return contract;
@@ -109,9 +108,6 @@ const normalizeMidMonthInstallments = (contract: Contract) => {
   return {
     ...contract,
     installments: normalized,
-    signs: contract.signs.map((sign, index) =>
-      index === 0 ? { ...sign, cost: total } : sign,
-    ),
   };
 };
 
