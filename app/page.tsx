@@ -1168,7 +1168,7 @@ function AgreementCard({
   contract: Contract;
   onDelete: () => void;
 }) {
-  const [editing, setEditing] = useState(false);
+  const [editing, setEditing] = useState<"period" | "firstDue" | null>(null);
   const total = c.installments.reduce((s, i) => s + i.amount, 0);
   const companyPaymentStore: Record<string, Payment[]> = typeof window === "undefined" ? {} : JSON.parse(localStorage.getItem("ad-company-payments-v1") || "{}");
   const paid = (companyPaymentStore[c.company] || []).reduce((s, p) => s + p.amount, 0);
@@ -1187,8 +1187,11 @@ function AgreementCard({
           </div>
         </div>
         <div className="card-actions">
-          <button className="text-btn" onClick={() => setEditing(true)}>
+          <button className="text-btn" onClick={() => setEditing("period")}>
             تعديل فترة العرض
+          </button>
+          <button className="text-btn" onClick={() => setEditing("firstDue")}>
+            تعديل أول قسط
           </button>
           <button className="danger-link" onClick={onDelete}>
             حذف الاتفاق
@@ -1237,17 +1240,22 @@ function AgreementCard({
         </div>
       </div>
       {c.notes && <p className="note">{c.notes}</p>}
-      {editing && (
-        <Modal title="تعديل فترة العرض" close={() => setEditing(false)}>
+      {editing === "period" && (
+        <Modal title="تعديل فترة العرض" close={() => setEditing(null)}>
           <PeriodEditForm
             contract={c}
             onSave={(updated) => {
               window.dispatchEvent(
                 new CustomEvent("agreement-updated", { detail: updated }),
               );
-              setEditing(false);
+              setEditing(null);
             }}
           />
+        </Modal>
+      )}
+      {editing === "firstDue" && (
+        <Modal title="تعديل موعد أول قسط" close={() => setEditing(null)}>
+          <FirstDueEditForm contract={c} onSave={(updated) => { window.dispatchEvent(new CustomEvent("agreement-updated", { detail: updated })); setEditing(null); }} />
         </Modal>
       )}
     </article>
@@ -1690,4 +1698,12 @@ function PeriodEditForm({
       <button className="primary submit">حفظ تعديل فترة العرض</button>
     </form>
   );
+}
+
+function FirstDueEditForm({ contract, onSave }: { contract: Contract; onSave: (c: Contract) => void }) {
+  const ordered = [...contract.installments].sort((a, b) => a.due.localeCompare(b.due));
+  const target = ordered.find(i => i.kind === "installment") || ordered[0];
+  const [date, setDate] = useState(target?.due || today());
+  function save(e: React.FormEvent) { e.preventDefault(); if (!target) return; onSave({ ...contract, installments: contract.installments.map(i => i.id === target.id ? { ...i, due: date } : i) }); }
+  return <form className="form" onSubmit={save}><div className="balance-box">القسط: <b>{target?.label || "أول قسط"}</b> · القيمة: <b>{money(target?.amount || 0)}</b></div><label>موعد السداد الصحيح<input type="date" required value={date} onChange={e => setDate(e.target.value)}/></label><p className="form-hint">سيتم تعديل تاريخ هذا القسط فقط، ثم يعيد النظام ترتيب الاستحقاقات حسب التاريخ.</p><button className="primary submit">حفظ موعد أول قسط</button></form>;
 }
