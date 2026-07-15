@@ -63,7 +63,7 @@ const agreementValueForMonth = (c: Contract, year: number, month: number) => {
   const from = start > monthStart ? start : monthStart;
   const to = end < monthEnd ? end : monthEnd;
   if (from > to) return 0;
-  if (year === start.getFullYear() && month === start.getMonth() && start.getDate() > 1) return Math.round((c.quantity || 1) * (c.monthlyUnitPrice || 0) * 50) / 100;
+  if (year === start.getFullYear() && month === start.getMonth() && start.getDate() === 15) return Math.round((c.quantity || 1) * (c.monthlyUnitPrice || 0) * 50) / 100;
   const activeDays = Math.floor((to.getTime() - from.getTime()) / 86400000) + 1;
   const daysInMonth = monthEnd.getDate();
   return (
@@ -74,7 +74,7 @@ const agreementValueForMonth = (c: Contract, year: number, month: number) => {
     ) / 100
   );
 };
-const partialStartMonthAmount = (startText: string, quantity: number, unitPrice: number) => { if (!startText) return 0; const start = new Date(startText + "T12:00:00"); return start.getDate() === 1 ? 0 : Math.round(quantity * unitPrice * 50) / 100; };
+const partialStartMonthAmount = (startText: string, quantity: number, unitPrice: number) => { if (!startText) return 0; const start = new Date(startText + "T12:00:00"); if (start.getDate() === 1) return 0; if (start.getDate() === 15) return Math.round(quantity * unitPrice * 50) / 100; const days = new Date(start.getFullYear(), start.getMonth() + 1, 0).getDate(); return Math.round(quantity * unitPrice * (days - start.getDate() + 1) / days * 100) / 100; };
 
 const seed: Contract[] = [
   {
@@ -1585,9 +1585,9 @@ function AgreementForm({
     const days = (y: number, m: number) => new Date(y, m + 1, 0).getDate();
     let value = 0;
     if (a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth())
-      value = a.getDate() > 1 ? 0.5 : (b.getDate() - a.getDate() + 1) / days(a.getFullYear(), a.getMonth());
+      value = a.getDate() === 15 ? 0.5 : (b.getDate() - a.getDate() + 1) / days(a.getFullYear(), a.getMonth());
     else {
-      value = (a.getDate() > 1 ? 0.5 : 1) + b.getDate() / days(b.getFullYear(), b.getMonth());
+      value = (a.getDate() === 15 ? 0.5 : (days(a.getFullYear(), a.getMonth()) - a.getDate() + 1) / days(a.getFullYear(), a.getMonth())) + b.getDate() / days(b.getFullYear(), b.getMonth());
       const cursor = new Date(a.getFullYear(), a.getMonth() + 1, 1);
       const last = new Date(b.getFullYear(), b.getMonth(), 1);
       while (cursor < last) {
@@ -1900,9 +1900,9 @@ function PeriodEditForm({
     const days = (y: number, m: number) => new Date(y, m + 1, 0).getDate();
     let value = 0;
     if (a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth())
-      value = a.getDate() > 1 ? 0.5 : (b.getDate() - a.getDate() + 1) / days(a.getFullYear(), a.getMonth());
+      value = a.getDate() === 15 ? 0.5 : (b.getDate() - a.getDate() + 1) / days(a.getFullYear(), a.getMonth());
     else {
-      value = (a.getDate() > 1 ? 0.5 : 1) + b.getDate() / days(b.getFullYear(), b.getMonth());
+      value = (a.getDate() === 15 ? 0.5 : (days(a.getFullYear(), a.getMonth()) - a.getDate() + 1) / days(a.getFullYear(), a.getMonth())) + b.getDate() / days(b.getFullYear(), b.getMonth());
       const cursor = new Date(a.getFullYear(), a.getMonth() + 1, 1);
       const last = new Date(b.getFullYear(), b.getMonth(), 1);
       while (cursor < last) {
