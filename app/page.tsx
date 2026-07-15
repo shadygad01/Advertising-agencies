@@ -70,12 +70,12 @@ export default function Home() {
 
   return <div className="app" dir="rtl">
     <aside className="sidebar print-hide">
-      <div className="brand"><span className="brandmark">م</span><div><strong>مخطط المصروف</strong><small>الدعاية والإعلانات</small></div></div>
+      <div className="brand"><span className="brandmark">م</span><div><span className="org-name">مجموعة شركات آثار للسياحة</span><strong>مخطط المصروف</strong><small>الدعاية والإعلانات</small></div></div>
       <nav>{nav.map(n => <button key={n.id} className={view === n.id ? "active" : ""} onClick={() => setView(n.id)}><span>{n.icon}</span>{n.label}</button>)}</nav>
       <div className="side-actions"><button onClick={backup}>↓ نسخ احتياطي</button><button onClick={() => fileRef.current?.click()}>↑ استعادة البيانات</button><input ref={fileRef} type="file" accept=".json" hidden onChange={e => restore(e.target.files?.[0])}/><small>البيانات محفوظة على هذا الجهاز</small></div>
     </aside>
     <main className="main">
-      <header className="topbar print-hide"><div><h1>{nav.find(n => n.id === view)?.label}</h1><p>نظرة واضحة على التزامات شركات الدعاية والسداد</p></div><div className="header-actions"><button className="secondary" onClick={() => setModal("payment")}>تسجيل دفعة</button><button className="primary" onClick={() => setModal("contract")}>＋ عقد جديد</button></div></header>
+      <header className="topbar print-hide"><div><span className="org-eyebrow">مجموعة شركات آثار للسياحة</span><h1>{nav.find(n => n.id === view)?.label}</h1><p>نظرة واضحة على التزامات شركات الدعاية والسداد</p></div><div className="header-actions"><button className="secondary" onClick={() => setModal("payment")}>تسجيل دفعة</button><button className="primary" onClick={() => setModal("contract")}>＋ عقد جديد</button></div></header>
 
       {view === "dashboard" && <>
         <section className="stats">
