@@ -159,6 +159,7 @@ export default function Home() {
     if (ready) localStorage.setItem(KEY, JSON.stringify(contracts));
   }, [contracts, ready]);
   useEffect(() => { if (ready) localStorage.setItem("ad-company-payments-v1", JSON.stringify(companyPayments)); }, [companyPayments, ready]);
+  useEffect(() => { if (!ready) return; setCompanyPayments(current => Object.fromEntries(Object.entries(current).filter(([company]) => contracts.some(c => c.company === company)))); }, [contracts, ready]);
   useEffect(() => {
     const update = (event: Event) => {
       const changed = (event as CustomEvent<Contract>).detail;
@@ -538,10 +539,7 @@ export default function Home() {
                     <AgreementCard
                       key={c.id}
                       contract={c}
-                      onDelete={() =>
-                        confirm("حذف هذا الاتفاق؟") &&
-                        setContracts((v) => v.filter((x) => x.id !== c.id))
-                      }
+                      onDelete={() => { if (!confirm("حذف هذا الاتفاق؟")) return; const isLast = contracts.filter(x => x.company === c.company).length === 1; setContracts(v => v.filter(x => x.id !== c.id)); if (isLast) setCompanyPayments(v => { const next = { ...v }; delete next[c.company]; return next; }); }}
                     />
                   ))}
               </>
