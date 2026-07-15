@@ -183,6 +183,7 @@ export default function Home() {
       ),
     [contracts],
   );
+  const companyDueRows = useMemo(() => companies.map(company => { const rows = allRows.filter(r => r.company === company && r.remaining > 0); if (!rows.length) return null; const amount = rows.reduce((s, r) => s + r.amount, 0); const applied = rows.reduce((s, r) => s + r.applied, 0); const remaining = rows.reduce((s, r) => s + r.remaining, 0); const due = [...rows].sort((a, b) => a.due.localeCompare(b.due))[0].due; const hasOverdue = rows.some(r => r.due < today()); return { id: `company-${company}`, company, title: `${new Set(rows.map(r => r.contractId)).size} اتفاق`, label: `إجمالي مستحقات الشركة (${rows.length} قسط)`, due, amount, applied, remaining, status: hasOverdue ? "متأخر" : applied > 0 ? "مدفوع جزئيًا" : "مستحق" }; }).filter(Boolean), [companies, allRows]);
   const reportContracts = useMemo(
     () =>
       reportCompany
@@ -448,7 +449,7 @@ export default function Home() {
                 </button>
               </div>
               <DueTable
-                rows={allRows.filter((r) => r.remaining > 0).slice(0, 6)}
+                rows={companyDueRows.slice(0, 6) as any[]}
               />
             </section>
           </>
