@@ -52,7 +52,27 @@ const money = (n: number) =>
   " ج.م";
 const uid = () => Math.random().toString(36).slice(2) + Date.now().toString(36);
 const today = () => new Date().toISOString().slice(0, 10);
-const agreementValueForMonth = (c: Contract, year: number, month: number) => { const startText = c.displayStart || c.signs[0]?.start; const endText = c.signs[0]?.end; if (!startText || !endText) return 0; const monthStart = new Date(year, month, 1, 12); const monthEnd = new Date(year, month + 1, 0, 12); const start = new Date(startText + "T12:00:00"); const end = new Date(endText + "T12:00:00"); const from = start > monthStart ? start : monthStart; const to = end < monthEnd ? end : monthEnd; if (from > to) return 0; const activeDays = Math.floor((to.getTime() - from.getTime()) / 86400000) + 1; const daysInMonth = monthEnd.getDate(); return Math.round(((c.quantity || 1) * (c.monthlyUnitPrice || 0) * activeDays / daysInMonth) * 100) / 100; };
+const agreementValueForMonth = (c: Contract, year: number, month: number) => {
+  const startText = c.displayStart || c.signs[0]?.start;
+  const endText = c.signs[0]?.end;
+  if (!startText || !endText) return 0;
+  const monthStart = new Date(year, month, 1, 12);
+  const monthEnd = new Date(year, month + 1, 0, 12);
+  const start = new Date(startText + "T12:00:00");
+  const end = new Date(endText + "T12:00:00");
+  const from = start > monthStart ? start : monthStart;
+  const to = end < monthEnd ? end : monthEnd;
+  if (from > to) return 0;
+  const activeDays = Math.floor((to.getTime() - from.getTime()) / 86400000) + 1;
+  const daysInMonth = monthEnd.getDate();
+  return (
+    Math.round(
+      (((c.quantity || 1) * (c.monthlyUnitPrice || 0) * activeDays) /
+        daysInMonth) *
+        100,
+    ) / 100
+  );
+};
 
 const seed: Contract[] = [
   {
@@ -137,7 +157,9 @@ export default function Home() {
   const [selected, setSelected] = useState<string>("");
   const [selectedCompany, setSelectedCompany] = useState<string>("");
   const [reportCompany, setReportCompany] = useState<string>("");
-  const [companyPayments, setCompanyPayments] = useState<Record<string, Payment[]>>({});
+  const [companyPayments, setCompanyPayments] = useState<
+    Record<string, Payment[]>
+  >({});
   const fileRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -146,12 +168,19 @@ export default function Home() {
       localStorage.getItem("ad-expense-planner-v1");
     const loaded: Contract[] = saved ? JSON.parse(saved) : seed;
     const savedCompanyPayments = localStorage.getItem("ad-company-payments-v1");
-    if (savedCompanyPayments) setCompanyPayments(JSON.parse(savedCompanyPayments));
+    if (savedCompanyPayments)
+      setCompanyPayments(JSON.parse(savedCompanyPayments));
     else {
       const migrated: Record<string, Payment[]> = {};
-      loaded.forEach(c => c.payments.forEach(p => { migrated[c.company] = [...(migrated[c.company] || []), p]; }));
+      loaded.forEach((c) =>
+        c.payments.forEach((p) => {
+          migrated[c.company] = [...(migrated[c.company] || []), p];
+        }),
+      );
       setCompanyPayments(migrated);
-      loaded.forEach(c => { c.payments = []; });
+      loaded.forEach((c) => {
+        c.payments = [];
+      });
     }
     setContracts(loaded);
     setReady(true);
@@ -159,8 +188,23 @@ export default function Home() {
   useEffect(() => {
     if (ready) localStorage.setItem(KEY, JSON.stringify(contracts));
   }, [contracts, ready]);
-  useEffect(() => { if (ready) localStorage.setItem("ad-company-payments-v1", JSON.stringify(companyPayments)); }, [companyPayments, ready]);
-  useEffect(() => { if (!ready) return; setCompanyPayments(current => Object.fromEntries(Object.entries(current).filter(([company]) => contracts.some(c => c.company === company)))); }, [contracts, ready]);
+  useEffect(() => {
+    if (ready)
+      localStorage.setItem(
+        "ad-company-payments-v1",
+        JSON.stringify(companyPayments),
+      );
+  }, [companyPayments, ready]);
+  useEffect(() => {
+    if (!ready) return;
+    setCompanyPayments((current) =>
+      Object.fromEntries(
+        Object.entries(current).filter(([company]) =>
+          contracts.some((c) => c.company === company),
+        ),
+      ),
+    );
+  }, [contracts, ready]);
   useEffect(() => {
     const update = (event: Event) => {
       const changed = (event as CustomEvent<Contract>).detail;
@@ -172,9 +216,41 @@ export default function Home() {
 
   const allRows = useMemo(
     () =>
-      [...new Set(contracts.map(c => c.company))].flatMap(company => {
-        let paid = (companyPayments[company] || []).reduce((s, p) => s + p.amount, 0);
-        return contracts.filter(c => c.company === company).flatMap(c => c.installments.map(i => ({ ...i, company, contractId: c.id, title: c.title }))).sort((a, b) => a.due.localeCompare(b.due)).map(i => { const applied = Math.min(paid, i.amount); paid -= applied; const remaining = i.amount - applied; const overdue = remaining > 0 && i.due < today(); return { ...i, applied, remaining, status: remaining === 0 ? "مدفوع" : applied > 0 ? "مدفوع جزئيًا" : overdue ? "متأخر" : "مستحق" }; });
+      [...new Set(contracts.map((c) => c.company))].flatMap((company) => {
+        let paid = (companyPayments[company] || []).reduce(
+          (s, p) => s + p.amount,
+          0,
+        );
+        return contracts
+          .filter((c) => c.company === company)
+          .flatMap((c) =>
+            c.installments.map((i) => ({
+              ...i,
+              company,
+              contractId: c.id,
+              title: c.title,
+            })),
+          )
+          .sort((a, b) => a.due.localeCompare(b.due))
+          .map((i) => {
+            const applied = Math.min(paid, i.amount);
+            paid -= applied;
+            const remaining = i.amount - applied;
+            const overdue = remaining > 0 && i.due < today();
+            return {
+              ...i,
+              applied,
+              remaining,
+              status:
+                remaining === 0
+                  ? "مدفوع"
+                  : applied > 0
+                    ? "مدفوع جزئيًا"
+                    : overdue
+                      ? "متأخر"
+                      : "مستحق",
+            };
+          });
       }),
     [contracts, companyPayments],
   );
@@ -185,7 +261,39 @@ export default function Home() {
       ),
     [contracts],
   );
-  const companyDueRows = useMemo(() => companies.map(company => { const rows = allRows.filter(r => r.company === company && r.remaining > 0); if (!rows.length) return null; const amount = rows.reduce((s, r) => s + r.amount, 0); const applied = rows.reduce((s, r) => s + r.applied, 0); const remaining = rows.reduce((s, r) => s + r.remaining, 0); const due = [...rows].sort((a, b) => a.due.localeCompare(b.due))[0].due; const hasOverdue = rows.some(r => r.due < today()); return { id: `company-${company}`, company, title: `${new Set(rows.map(r => r.contractId)).size} اتفاق`, label: `إجمالي مستحقات الشركة (${rows.length} قسط)`, due, amount, applied, remaining, status: hasOverdue ? "متأخر" : applied > 0 ? "مدفوع جزئيًا" : "مستحق" }; }).filter(Boolean), [companies, allRows]);
+  const companyDueRows = useMemo(
+    () =>
+      companies
+        .map((company) => {
+          const rows = allRows.filter(
+            (r) => r.company === company && r.remaining > 0,
+          );
+          if (!rows.length) return null;
+          const amount = rows.reduce((s, r) => s + r.amount, 0);
+          const applied = rows.reduce((s, r) => s + r.applied, 0);
+          const remaining = rows.reduce((s, r) => s + r.remaining, 0);
+          const due = [...rows].sort((a, b) => a.due.localeCompare(b.due))[0]
+            .due;
+          const hasOverdue = rows.some((r) => r.due < today());
+          return {
+            id: `company-${company}`,
+            company,
+            title: `${new Set(rows.map((r) => r.contractId)).size} اتفاق`,
+            label: `إجمالي مستحقات الشركة (${rows.length} قسط)`,
+            due,
+            amount,
+            applied,
+            remaining,
+            status: hasOverdue
+              ? "متأخر"
+              : applied > 0
+                ? "مدفوع جزئيًا"
+                : "مستحق",
+          };
+        })
+        .filter(Boolean),
+    [companies, allRows],
+  );
   const reportContracts = useMemo(
     () =>
       reportCompany
@@ -236,7 +344,9 @@ export default function Home() {
     (s, c) => s + c.installments.reduce((x, i) => x + i.amount, 0),
     0,
   );
-  const totalPaid = Object.values(companyPayments).flat().reduce((s, p) => s + p.amount, 0);
+  const totalPaid = Object.values(companyPayments)
+    .flat()
+    .reduce((s, p) => s + p.amount, 0);
   const overdue = allRows
     .filter((r) => r.due < today())
     .reduce((s, r) => s + r.remaining, 0);
@@ -248,14 +358,30 @@ export default function Home() {
     const company = String(fd.get("company"));
     const amount = Number(fd.get("amount"));
     if (!company || amount <= 0) return;
-    setCompanyPayments(v => ({ ...v, [company]: [...(v[company] || []), { id: uid(), date: String(fd.get("date")), amount, note: String(fd.get("note") || "") }] }));
+    setCompanyPayments((v) => ({
+      ...v,
+      [company]: [
+        ...(v[company] || []),
+        {
+          id: uid(),
+          date: String(fd.get("date")),
+          amount,
+          note: String(fd.get("note") || ""),
+        },
+      ],
+    }));
     setModal(null);
   }
   function backup() {
     const blob = new Blob(
       [
         JSON.stringify(
-          { version: 2, exportedAt: new Date().toISOString(), contracts, companyPayments },
+          {
+            version: 2,
+            exportedAt: new Date().toISOString(),
+            contracts,
+            companyPayments,
+          },
           null,
           2,
         ),
@@ -274,8 +400,10 @@ export default function Home() {
     r.onload = () => {
       try {
         const d = JSON.parse(String(r.result));
-        if (Array.isArray(d.contracts)) { setContracts(d.contracts); if (d.companyPayments) setCompanyPayments(d.companyPayments); }
-        else alert("ملف غير صالح");
+        if (Array.isArray(d.contracts)) {
+          setContracts(d.contracts);
+          if (d.companyPayments) setCompanyPayments(d.companyPayments);
+        } else alert("ملف غير صالح");
       } catch {
         alert("تعذر قراءة الملف");
       }
@@ -450,9 +578,7 @@ export default function Home() {
                   عرض الكل ←
                 </button>
               </div>
-              <DueTable
-                rows={companyDueRows.slice(0, 6) as any[]}
-              />
+              <DueTable rows={companyDueRows.slice(0, 6) as any[]} />
             </section>
           </>
         )}
@@ -481,7 +607,10 @@ export default function Home() {
                       s + c.installments.reduce((x, i) => x + i.amount, 0),
                     0,
                   );
-                  const paid = (companyPayments[company] || []).reduce((s, p) => s + p.amount, 0);
+                  const paid = (companyPayments[company] || []).reduce(
+                    (s, p) => s + p.amount,
+                    0,
+                  );
                   return (
                     <button
                       className="company-card"
@@ -540,7 +669,19 @@ export default function Home() {
                     <AgreementCard
                       key={c.id}
                       contract={c}
-                      onDelete={() => { if (!confirm("حذف هذا الاتفاق؟")) return; const isLast = contracts.filter(x => x.company === c.company).length === 1; setContracts(v => v.filter(x => x.id !== c.id)); if (isLast) setCompanyPayments(v => { const next = { ...v }; delete next[c.company]; return next; }); }}
+                      onDelete={() => {
+                        if (!confirm("حذف هذا الاتفاق؟")) return;
+                        const isLast =
+                          contracts.filter((x) => x.company === c.company)
+                            .length === 1;
+                        setContracts((v) => v.filter((x) => x.id !== c.id));
+                        if (isLast)
+                          setCompanyPayments((v) => {
+                            const next = { ...v };
+                            delete next[c.company];
+                            return next;
+                          });
+                      }}
                     />
                   ))}
               </>
@@ -607,10 +748,113 @@ export default function Home() {
                 السنة المالية {year} · تاريخ التقرير {today()}
               </p>
             </div>
-            <CompanySummaryReport companies={reportCompany ? [reportCompany] : companies} contracts={contracts} payments={companyPayments} />
-            <CompanyInstallmentDistribution companies={reportCompany ? [reportCompany] : companies} contracts={contracts} year={year} />
-            {reportCompany && <div className="panel report-table"><div className="panel-head"><div><h2>أصل الاتفاق حسب شهور العرض</h2><p>قيمة العرض الشهرية قبل النظر إلى مواعيد الأقساط والسداد</p></div></div><table><thead><tr><th>الاتفاق</th>{monthsAr.map(m => <th key={m}>{m}</th>)}<th>الإجمالي</th></tr></thead><tbody>{reportContracts.map(c => { const vals = monthsAr.map((_, i) => agreementValueForMonth(c, year, i)); return <tr key={`origin-${c.id}`}><td><b>{c.title}</b><small>{c.signs[0]?.location} · {c.quantity || 1} يافطة × {money(c.monthlyUnitPrice || 0)}</small></td>{vals.map((v, i) => <td key={i}>{v ? new Intl.NumberFormat("ar-EG", { maximumFractionDigits: 0 }).format(v) : "—"}</td>)}<td><b>{new Intl.NumberFormat("ar-EG", { maximumFractionDigits: 0 }).format(vals.reduce((s, v) => s + v, 0))}</b></td></tr>})}<tr className="total-row"><td>أصل المستحق لكل شهر</td>{monthsAr.map((_, i) => { const total = reportContracts.reduce((s, c) => s + agreementValueForMonth(c, year, i), 0); return <td key={i}>{total ? new Intl.NumberFormat("ar-EG", { maximumFractionDigits: 0 }).format(total) : "—"}</td>})}<td>{new Intl.NumberFormat("ar-EG", { maximumFractionDigits: 0 }).format(reportContracts.reduce((sum, c) => sum + monthsAr.reduce((s, _, i) => s + agreementValueForMonth(c, year, i), 0), 0))}</td></tr></tbody></table></div>}
-            <div className="panel-head report-section-label"><div><h2>جدول الأقساط المتفق عليه</h2><p>المبالغ طبقًا لمواعيد السداد المسجلة</p></div></div>
+            <CompanySummaryReport
+              companies={reportCompany ? [reportCompany] : companies}
+              contracts={contracts}
+              payments={companyPayments}
+            />
+            <CompanyInstallmentDistribution
+              companies={reportCompany ? [reportCompany] : companies}
+              contracts={contracts}
+              year={year}
+            />
+            {reportCompany && (
+              <div className="panel report-table">
+                <div className="panel-head">
+                  <div>
+                    <h2>أصل الاتفاق حسب شهور العرض</h2>
+                    <p>
+                      قيمة العرض الشهرية قبل النظر إلى مواعيد الأقساط والسداد
+                    </p>
+                  </div>
+                </div>
+                <table>
+                  <thead>
+                    <tr>
+                      <th>الاتفاق</th>
+                      {monthsAr.map((m) => (
+                        <th key={m}>{m}</th>
+                      ))}
+                      <th>الإجمالي</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {reportContracts.map((c) => {
+                      const vals = monthsAr.map((_, i) =>
+                        agreementValueForMonth(c, year, i),
+                      );
+                      return (
+                        <tr key={`origin-${c.id}`}>
+                          <td>
+                            <b>{c.title}</b>
+                            <small>
+                              {c.signs[0]?.location} · {c.quantity || 1} يافطة ×{" "}
+                              {money(c.monthlyUnitPrice || 0)}
+                            </small>
+                          </td>
+                          {vals.map((v, i) => (
+                            <td key={i}>
+                              {v
+                                ? new Intl.NumberFormat("ar-EG", {
+                                    maximumFractionDigits: 0,
+                                  }).format(v)
+                                : "—"}
+                            </td>
+                          ))}
+                          <td>
+                            <b>
+                              {new Intl.NumberFormat("ar-EG", {
+                                maximumFractionDigits: 0,
+                              }).format(vals.reduce((s, v) => s + v, 0))}
+                            </b>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                    <tr className="total-row">
+                      <td>أصل المستحق لكل شهر</td>
+                      {monthsAr.map((_, i) => {
+                        const total = reportContracts.reduce(
+                          (s, c) => s + agreementValueForMonth(c, year, i),
+                          0,
+                        );
+                        return (
+                          <td key={i}>
+                            {total
+                              ? new Intl.NumberFormat("ar-EG", {
+                                  maximumFractionDigits: 0,
+                                }).format(total)
+                              : "—"}
+                          </td>
+                        );
+                      })}
+                      <td>
+                        {new Intl.NumberFormat("ar-EG", {
+                          maximumFractionDigits: 0,
+                        }).format(
+                          reportContracts.reduce(
+                            (sum, c) =>
+                              sum +
+                              monthsAr.reduce(
+                                (s, _, i) =>
+                                  s + agreementValueForMonth(c, year, i),
+                                0,
+                              ),
+                            0,
+                          ),
+                        )}
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            )}
+            <div className="panel-head report-section-label">
+              <div>
+                <h2>جدول الأقساط المتفق عليه</h2>
+                <p>المبالغ طبقًا لمواعيد السداد المسجلة</p>
+              </div>
+            </div>
             <div className="panel report-table">
               <table>
                 <thead>
@@ -740,8 +984,18 @@ export default function Home() {
                   {money(
                     Math.max(
                       0,
-                      contracts.filter(c => c.company === selected).reduce((s, c) => s + c.installments.reduce((x, i) => x + i.amount, 0), 0) -
-                        (companyPayments[selected] || []).reduce((s, p) => s + p.amount, 0),
+                      contracts
+                        .filter((c) => c.company === selected)
+                        .reduce(
+                          (s, c) =>
+                            s +
+                            c.installments.reduce((x, i) => x + i.amount, 0),
+                          0,
+                        ) -
+                        (companyPayments[selected] || []).reduce(
+                          (s, p) => s + p.amount,
+                          0,
+                        ),
                     ),
                   )}
                 </b>
@@ -1172,10 +1426,18 @@ function AgreementCard({
   contract: Contract;
   onDelete: () => void;
 }) {
-  const [editing, setEditing] = useState<"period" | "firstDue" | "quantity" | null>(null);
+  const [editing, setEditing] = useState<
+    "period" | "firstDue" | "quantity" | null
+  >(null);
   const total = c.installments.reduce((s, i) => s + i.amount, 0);
-  const companyPaymentStore: Record<string, Payment[]> = typeof window === "undefined" ? {} : JSON.parse(localStorage.getItem("ad-company-payments-v1") || "{}");
-  const paid = (companyPaymentStore[c.company] || []).reduce((s, p) => s + p.amount, 0);
+  const companyPaymentStore: Record<string, Payment[]> =
+    typeof window === "undefined"
+      ? {}
+      : JSON.parse(localStorage.getItem("ad-company-payments-v1") || "{}");
+  const paid = (companyPaymentStore[c.company] || []).reduce(
+    (s, p) => s + p.amount,
+    0,
+  );
   const sign = c.signs[0];
   return (
     <article className="contract-card">
@@ -1262,12 +1524,31 @@ function AgreementCard({
       )}
       {editing === "firstDue" && (
         <Modal title="تعديل موعد أول قسط" close={() => setEditing(null)}>
-          <FirstDueEditForm contract={c} onSave={(updated) => { window.dispatchEvent(new CustomEvent("agreement-updated", { detail: updated })); setEditing(null); }} />
+          <FirstDueEditForm
+            contract={c}
+            onSave={(updated) => {
+              window.dispatchEvent(
+                new CustomEvent("agreement-updated", { detail: updated }),
+              );
+              setEditing(null);
+            }}
+          />
         </Modal>
       )}
       {editing === "quantity" && (
-        <Modal title="تعديل عدد اليافطات وسعر الشهر" close={() => setEditing(null)}>
-          <QuantityEditForm contract={c} onSave={(updated) => { window.dispatchEvent(new CustomEvent("agreement-updated", { detail: updated })); setEditing(null); }} />
+        <Modal
+          title="تعديل عدد اليافطات وسعر الشهر"
+          close={() => setEditing(null)}
+        >
+          <QuantityEditForm
+            contract={c}
+            onSave={(updated) => {
+              window.dispatchEvent(
+                new CustomEvent("agreement-updated", { detail: updated }),
+              );
+              setEditing(null);
+            }}
+          />
         </Modal>
       )}
     </article>
@@ -1712,27 +1993,288 @@ function PeriodEditForm({
   );
 }
 
-function FirstDueEditForm({ contract, onSave }: { contract: Contract; onSave: (c: Contract) => void }) {
-  const ordered = [...contract.installments].sort((a, b) => a.due.localeCompare(b.due));
-  const target = ordered.find(i => i.kind === "installment") || ordered[0];
+function FirstDueEditForm({
+  contract,
+  onSave,
+}: {
+  contract: Contract;
+  onSave: (c: Contract) => void;
+}) {
+  const ordered = [...contract.installments].sort((a, b) =>
+    a.due.localeCompare(b.due),
+  );
+  const target = ordered.find((i) => i.kind === "installment") || ordered[0];
   const [date, setDate] = useState(target?.due || today());
-  function save(e: React.FormEvent) { e.preventDefault(); if (!target) return; onSave({ ...contract, installments: contract.installments.map(i => i.id === target.id ? { ...i, due: date } : i) }); }
-  return <form className="form" onSubmit={save}><div className="balance-box">القسط: <b>{target?.label || "أول قسط"}</b> · القيمة: <b>{money(target?.amount || 0)}</b></div><label>موعد السداد الصحيح<input type="date" required value={date} onChange={e => setDate(e.target.value)}/></label><p className="form-hint">سيتم تعديل تاريخ هذا القسط فقط، ثم يعيد النظام ترتيب الاستحقاقات حسب التاريخ.</p><button className="primary submit">حفظ موعد أول قسط</button></form>;
+  function save(e: React.FormEvent) {
+    e.preventDefault();
+    if (!target) return;
+    onSave({
+      ...contract,
+      installments: contract.installments.map((i) =>
+        i.id === target.id ? { ...i, due: date } : i,
+      ),
+    });
+  }
+  return (
+    <form className="form" onSubmit={save}>
+      <div className="balance-box">
+        القسط: <b>{target?.label || "أول قسط"}</b> · القيمة:{" "}
+        <b>{money(target?.amount || 0)}</b>
+      </div>
+      <label>
+        موعد السداد الصحيح
+        <input
+          type="date"
+          required
+          value={date}
+          onChange={(e) => setDate(e.target.value)}
+        />
+      </label>
+      <p className="form-hint">
+        سيتم تعديل تاريخ هذا القسط فقط، ثم يعيد النظام ترتيب الاستحقاقات حسب
+        التاريخ.
+      </p>
+      <button className="primary submit">حفظ موعد أول قسط</button>
+    </form>
+  );
 }
 
-function QuantityEditForm({ contract, onSave }: { contract: Contract; onSave: (c: Contract) => void }) {
-  const [quantity, setQuantity] = useState(contract.quantity || contract.signs.length || 1); const [unit, setUnit] = useState(contract.monthlyUnitPrice || 0); const months = contract.durationMonths || 1; const oldTotal = contract.installments.reduce((s, i) => s + i.amount, 0); const newTotal = quantity * unit * months;
-  function save(e: React.FormEvent) { e.preventDefault(); if (!contract.installments.length || oldTotal <= 0) return; const installments = contract.installments.map(i => ({ ...i, amount: Math.round((i.amount / oldTotal) * newTotal * 100) / 100 })); const distributed = installments.reduce((s, i) => s + i.amount, 0); installments[installments.length - 1].amount += newTotal - distributed; const signs = contract.signs.map((s, i) => i === 0 ? { ...s, cost: newTotal } : s); onSave({ ...contract, quantity, monthlyUnitPrice: unit, installments, signs }); }
-  return <form className="form" onSubmit={save}><div className="form-grid"><label>عدد اليافطات الصحيح<input type="number" min="1" required value={quantity} onChange={e => setQuantity(Number(e.target.value))}/></label><label>سعر الشهر الصحيح لليافطة<input type="number" min="1" required value={unit || ""} onChange={e => setUnit(Number(e.target.value))}/></label></div><div className="calculation-box"><span>{quantity} يافطة</span><i>×</i><span>{money(unit)} شهريًا</span><i>×</i><span>{months} شهر</span><strong>{money(newTotal)}</strong></div><div className="balance-box">القيمة السابقة: <b>{money(oldTotal)}</b> · القيمة الجديدة: <b>{money(newTotal)}</b></div><p className="form-hint">سيُعاد حساب جميع الأقساط من البداية بنفس مواعيدها ونِسَب توزيعها الحالية، وليس تعديل آخر قسط فقط.</p><button className="primary submit">إعادة الحساب وحفظ التعديل</button></form>;
+function QuantityEditForm({
+  contract,
+  onSave,
+}: {
+  contract: Contract;
+  onSave: (c: Contract) => void;
+}) {
+  const [quantity, setQuantity] = useState(
+    contract.quantity || contract.signs.length || 1,
+  );
+  const [unit, setUnit] = useState(contract.monthlyUnitPrice || 0);
+  const months = contract.durationMonths || 1;
+  const oldTotal = contract.installments.reduce((s, i) => s + i.amount, 0);
+  const newTotal = quantity * unit * months;
+  function save(e: React.FormEvent) {
+    e.preventDefault();
+    if (!contract.installments.length || oldTotal <= 0) return;
+    const installments = contract.installments.map((i) => ({
+      ...i,
+      amount: Math.round((i.amount / oldTotal) * newTotal * 100) / 100,
+    }));
+    const distributed = installments.reduce((s, i) => s + i.amount, 0);
+    installments[installments.length - 1].amount += newTotal - distributed;
+    const signs = contract.signs.map((s, i) =>
+      i === 0 ? { ...s, cost: newTotal } : s,
+    );
+    onSave({
+      ...contract,
+      quantity,
+      monthlyUnitPrice: unit,
+      installments,
+      signs,
+    });
+  }
+  return (
+    <form className="form" onSubmit={save}>
+      <div className="form-grid">
+        <label>
+          عدد اليافطات الصحيح
+          <input
+            type="number"
+            min="1"
+            required
+            value={quantity}
+            onChange={(e) => setQuantity(Number(e.target.value))}
+          />
+        </label>
+        <label>
+          سعر الشهر الصحيح لليافطة
+          <input
+            type="number"
+            min="1"
+            required
+            value={unit || ""}
+            onChange={(e) => setUnit(Number(e.target.value))}
+          />
+        </label>
+      </div>
+      <div className="calculation-box">
+        <span>{quantity} يافطة</span>
+        <i>×</i>
+        <span>{money(unit)} شهريًا</span>
+        <i>×</i>
+        <span>{months} شهر</span>
+        <strong>{money(newTotal)}</strong>
+      </div>
+      <div className="balance-box">
+        القيمة السابقة: <b>{money(oldTotal)}</b> · القيمة الجديدة:{" "}
+        <b>{money(newTotal)}</b>
+      </div>
+      <p className="form-hint">
+        سيُعاد حساب جميع الأقساط من البداية بنفس مواعيدها ونِسَب توزيعها
+        الحالية، وليس تعديل آخر قسط فقط.
+      </p>
+      <button className="primary submit">إعادة الحساب وحفظ التعديل</button>
+    </form>
+  );
 }
 
-function CompanySummaryReport({ companies, contracts, payments }: { companies: string[]; contracts: Contract[]; payments: Record<string, Payment[]> }) {
-  const rows = companies.map(company => { const list = contracts.filter(c => c.company === company); const total = list.reduce((s, c) => s + c.installments.reduce((x, i) => x + i.amount, 0), 0); const paid = (payments[company] || []).reduce((s, p) => s + p.amount, 0); return { company, campaigns: list.length, total, paid, remaining: Math.max(0, total - paid) }; });
-  return <div className="panel report-table"><div className="panel-head"><div><h2>ملخص إجمالي الشركات</h2><p>إجمالي الحملات والعقود والمدفوع حتى الآن</p></div></div><table><thead><tr><th>شركة الإعلانات</th><th>عدد الحملات</th><th>إجمالي العقود</th><th>إجمالي المدفوع</th><th>المتبقي</th></tr></thead><tbody>{rows.map(r => <tr key={r.company}><td><b>{r.company}</b></td><td>{r.campaigns}</td><td>{money(r.total)}</td><td>{money(r.paid)}</td><td>{money(r.remaining)}</td></tr>)}<tr className="total-row"><td>الإجمالي العام</td><td>{rows.reduce((s, r) => s + r.campaigns, 0)}</td><td>{money(rows.reduce((s, r) => s + r.total, 0))}</td><td>{money(rows.reduce((s, r) => s + r.paid, 0))}</td><td>{money(rows.reduce((s, r) => s + r.remaining, 0))}</td></tr></tbody></table></div>;
+function CompanySummaryReport({
+  companies,
+  contracts,
+  payments,
+}: {
+  companies: string[];
+  contracts: Contract[];
+  payments: Record<string, Payment[]>;
+}) {
+  const rows = companies.map((company) => {
+    const list = contracts.filter((c) => c.company === company);
+    const total = list.reduce(
+      (s, c) => s + c.installments.reduce((x, i) => x + i.amount, 0),
+      0,
+    );
+    const paid = (payments[company] || []).reduce((s, p) => s + p.amount, 0);
+    return {
+      company,
+      campaigns: list.length,
+      total,
+      paid,
+      remaining: Math.max(0, total - paid),
+    };
+  });
+  return (
+    <div className="panel report-table print-keep">
+      <div className="panel-head">
+        <div>
+          <h2>ملخص إجمالي الشركات</h2>
+          <p>إجمالي الحملات والعقود والمدفوع حتى الآن</p>
+        </div>
+      </div>
+      <table>
+        <thead>
+          <tr>
+            <th>شركة الإعلانات</th>
+            <th>عدد الحملات</th>
+            <th>إجمالي العقود</th>
+            <th>إجمالي المدفوع</th>
+            <th>المتبقي</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((r) => (
+            <tr key={r.company}>
+              <td>
+                <b>{r.company}</b>
+              </td>
+              <td>{r.campaigns}</td>
+              <td>{money(r.total)}</td>
+              <td>{money(r.paid)}</td>
+              <td>{money(r.remaining)}</td>
+            </tr>
+          ))}
+          <tr className="total-row">
+            <td>الإجمالي العام</td>
+            <td>{rows.reduce((s, r) => s + r.campaigns, 0)}</td>
+            <td>{money(rows.reduce((s, r) => s + r.total, 0))}</td>
+            <td>{money(rows.reduce((s, r) => s + r.paid, 0))}</td>
+            <td>{money(rows.reduce((s, r) => s + r.remaining, 0))}</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  );
 }
 
-function CompanyInstallmentDistribution({ companies, contracts, year }: { companies: string[]; contracts: Contract[]; year: number }) {
-  const values = (company: string) => monthsAr.map((_, month) => contracts.filter(c => c.company === company).reduce((sum, c) => sum + c.installments.filter(i => Number(i.due.slice(0, 4)) === year && Number(i.due.slice(5, 7)) === month + 1).reduce((s, i) => s + i.amount, 0), 0));
-  const rows = companies.map(company => ({ company, vals: values(company) }));
-  return <div className="panel report-table"><div className="panel-head"><div><h2>توزيع الأقساط الشهرية حسب الشركات</h2><p>الشركات المكوّنة لإجمالي الأقساط المطلوبة في كل شهر</p></div></div><table><thead><tr><th>شركة الإعلانات</th>{monthsAr.map(m => <th key={m}>{m}</th>)}<th>إجمالي السنة</th></tr></thead><tbody>{rows.map(r => <tr key={r.company}><td><b>{r.company}</b></td>{r.vals.map((v, i) => <td key={i}>{v ? new Intl.NumberFormat("ar-EG", { maximumFractionDigits: 0 }).format(v) : "—"}</td>)}<td><b>{money(r.vals.reduce((s, v) => s + v, 0))}</b></td></tr>)}<tr className="total-row"><td>إجمالي الشهر</td>{monthsAr.map((_, i) => { const v = rows.reduce((s, r) => s + r.vals[i], 0); return <td key={i}>{v ? new Intl.NumberFormat("ar-EG", { maximumFractionDigits: 0 }).format(v) : "—"}</td>})}<td>{money(rows.reduce((sum, r) => sum + r.vals.reduce((s, v) => s + v, 0), 0))}</td></tr></tbody></table></div>;
+function CompanyInstallmentDistribution({
+  companies,
+  contracts,
+  year,
+}: {
+  companies: string[];
+  contracts: Contract[];
+  year: number;
+}) {
+  const values = (company: string) =>
+    monthsAr.map((_, month) =>
+      contracts
+        .filter((c) => c.company === company)
+        .reduce(
+          (sum, c) =>
+            sum +
+            c.installments
+              .filter(
+                (i) =>
+                  Number(i.due.slice(0, 4)) === year &&
+                  Number(i.due.slice(5, 7)) === month + 1,
+              )
+              .reduce((s, i) => s + i.amount, 0),
+          0,
+        ),
+    );
+  const rows = companies.map((company) => ({ company, vals: values(company) }));
+  return (
+    <div className="panel report-table print-keep">
+      <div className="panel-head">
+        <div>
+          <h2>توزيع الأقساط الشهرية حسب الشركات</h2>
+          <p>الشركات المكوّنة لإجمالي الأقساط المطلوبة في كل شهر</p>
+        </div>
+      </div>
+      <table>
+        <thead>
+          <tr>
+            <th>شركة الإعلانات</th>
+            {monthsAr.map((m) => (
+              <th key={m}>{m}</th>
+            ))}
+            <th>إجمالي السنة</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((r) => (
+            <tr key={r.company}>
+              <td>
+                <b>{r.company}</b>
+              </td>
+              {r.vals.map((v, i) => (
+                <td key={i}>
+                  {v
+                    ? new Intl.NumberFormat("ar-EG", {
+                        maximumFractionDigits: 0,
+                      }).format(v)
+                    : "—"}
+                </td>
+              ))}
+              <td>
+                <b>{money(r.vals.reduce((s, v) => s + v, 0))}</b>
+              </td>
+            </tr>
+          ))}
+          <tr className="total-row">
+            <td>إجمالي الشهر</td>
+            {monthsAr.map((_, i) => {
+              const v = rows.reduce((s, r) => s + r.vals[i], 0);
+              return (
+                <td key={i}>
+                  {v
+                    ? new Intl.NumberFormat("ar-EG", {
+                        maximumFractionDigits: 0,
+                      }).format(v)
+                    : "—"}
+                </td>
+              );
+            })}
+            <td>
+              {money(
+                rows.reduce(
+                  (sum, r) => sum + r.vals.reduce((s, v) => s + v, 0),
+                  0,
+                ),
+              )}
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  );
 }
