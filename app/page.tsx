@@ -73,6 +73,7 @@ const agreementValueForMonth = (c: Contract, year: number, month: number) => {
     ) / 100
   );
 };
+const partialStartMonthAmount = (startText: string, quantity: number, unitPrice: number) => { if (!startText) return 0; const start = new Date(startText + "T12:00:00"); if (start.getDate() === 1) return 0; const daysInMonth = new Date(start.getFullYear(), start.getMonth() + 1, 0).getDate(); const activeDays = daysInMonth - start.getDate() + 1; return Math.round(quantity * unitPrice * activeDays / daysInMonth * 100) / 100; };
 
 const seed: Contract[] = [
   {
@@ -1625,7 +1626,8 @@ function AgreementForm({
       const count = Math.max(1, Number(fd.get("count") || 1));
       const firstDue = String(fd.get("firstDue"));
       const remaining = Math.max(0, total - deposit);
-      const each = remaining / count;
+      const partial = Math.min(partialStartMonthAmount(displayStart, quantity, unitPrice), remaining);
+      const each = (remaining - partial) / count;
       for (let x = 0; x < count; x++) {
         const d = new Date(firstDue + "T12:00:00");
         d.setMonth(d.getMonth() + x);
@@ -1633,7 +1635,7 @@ function AgreementForm({
           id: uid(),
           label: `القسط ${x + 1}`,
           due: d.toISOString().slice(0, 10),
-          amount: x === count - 1 ? remaining - each * (count - 1) : each,
+          amount: x === 0 ? each + partial : x === count - 1 ? remaining - (each + partial) - each * (count - 2) : each,
           kind: "installment",
         });
       }
@@ -2056,12 +2058,10 @@ function QuantityEditForm({
   function save(e: React.FormEvent) {
     e.preventDefault();
     if (!contract.installments.length || oldTotal <= 0) return;
-    const installments = contract.installments.map((i) => ({
-      ...i,
-      amount: Math.round((i.amount / oldTotal) * newTotal * 100) / 100,
-    }));
-    const distributed = installments.reduce((s, i) => s + i.amount, 0);
-    installments[installments.length - 1].amount += newTotal - distributed;
+    const depositTotal = contract.installments.filter(i => i.kind === "deposit").reduce((s, i) => s + i.amount, 0);
+    const normal = contract.installments.filter(i => i.kind === "installment").sort((a, b) => a.due.localeCompare(b.due));
+    const remaining = Math.max(0, newTotal - depositTotal); const partial = Math.min(partialStartMonthAmount(contract.displayStart || contract.signs[0]?.start || "", quantity, unit), remaining); const each = normal.length ? (remaining - partial) / normal.length : 0;
+    const installments = contract.installments.map(i => { if (i.kind === "deposit") return { ...i }; const index = normal.findIndex(x => x.id === i.id); const amount = index === 0 ? each + partial : index === normal.length - 1 ? remaining - (each + partial) - each * (normal.length - 2) : each; return { ...i, amount }; });
     const signs = contract.signs.map((s, i) =>
       i === 0 ? { ...s, cost: newTotal } : s,
     );
