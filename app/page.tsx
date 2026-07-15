@@ -342,6 +342,7 @@ export default function Home() {
       }),
     [reportRows, year],
   );
+  const timelineData = useMemo(() => Array.from({ length: 12 }, (_, offset) => { const date = new Date(year, 6 + offset, 1); const month = date.getMonth(); const itemYear = date.getFullYear(); const rows = allRows.filter(r => Number(r.due.slice(0, 4)) === itemYear && Number(r.due.slice(5, 7)) === month + 1); return { name: monthsAr[month], month, year: itemYear, due: rows.reduce((s, r) => s + r.amount, 0), paid: rows.reduce((s, r) => s + r.applied, 0), remaining: rows.reduce((s, r) => s + r.remaining, 0) }; }), [allRows, year]);
   const totalContracted = contracts.reduce(
     (s, c) => s + c.installments.reduce((x, i) => x + i.amount, 0),
     0,
@@ -352,7 +353,7 @@ export default function Home() {
   const overdue = allRows
     .filter((r) => r.due < today())
     .reduce((s, r) => s + r.remaining, 0);
-  const dueThisMonth = monthData[new Date().getMonth()]?.remaining || 0;
+  const dueThisMonth = allRows.filter(r => Number(r.due.slice(0, 4)) === new Date().getFullYear() && Number(r.due.slice(5, 7)) === new Date().getMonth() + 1).reduce((s, r) => s + r.remaining, 0);
 
   function savePayment(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -527,7 +528,7 @@ export default function Home() {
               <div className="panel-head">
                 <div>
                   <h2>الخريطة الزمنية للسداد</h2>
-                  <p>المطلوب والمتبقي خلال سنة {year}</p>
+                  <p>من يوليو {year} حتى يونيو {year + 1}</p>
                 </div>
                 <select
                   value={year}
@@ -539,17 +540,17 @@ export default function Home() {
                 </select>
               </div>
               <div className="months">
-                {monthData.map((m, i) => (
+                {timelineData.map((m) => (
                   <article
                     className={
-                      i === new Date().getMonth() &&
-                      year === new Date().getFullYear()
+                      m.month === new Date().getMonth() &&
+                      m.year === new Date().getFullYear()
                         ? "current"
                         : ""
                     }
-                    key={m.name}
+                    key={`${m.year}-${m.month}`}
                   >
-                    <div className="month-name">{m.name}</div>
+                    <div className="month-name">{m.name} <small>{m.year}</small></div>
                     <b>{money(m.due)}</b>
                     <div className="bar">
                       <i
