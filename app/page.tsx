@@ -111,6 +111,46 @@ const normalizeMidMonthInstallments = (contract: Contract) => {
   };
 };
 
+const installmentsForCompanyReport = (contract: Contract) => {
+  const startText = contract.displayStart || contract.signs[0]?.start || "";
+  const endText = contract.signs[0]?.end || "";
+  const normal = contract.installments
+    .filter((i) => i.kind === "installment")
+    .sort((a, b) => a.due.localeCompare(b.due));
+  if (!startText || !endText || !normal.length) return contract.installments;
+  const start = new Date(startText + "T12:00:00");
+  if (start.getDate() !== 15) return contract.installments;
+
+  const firstDue = new Date(normal[0].due + "T12:00:00");
+  const cursor = new Date(start.getFullYear(), start.getMonth(), 1, 12);
+  const end = new Date(endText + "T12:00:00");
+  const amounts = new Map<string, number>();
+  while (cursor <= end) {
+    const year = cursor.getFullYear();
+    const month = cursor.getMonth();
+    const value = agreementValueForMonth(contract, year, month);
+    const beforeFirstDue =
+      year < firstDue.getFullYear() ||
+      (year === firstDue.getFullYear() && month <= firstDue.getMonth());
+    const key = beforeFirstDue
+      ? normal[0].due.slice(0, 7)
+      : `${year}-${String(month + 1).padStart(2, "0")}`;
+    amounts.set(key, (amounts.get(key) || 0) + value);
+    cursor.setMonth(cursor.getMonth() + 1);
+  }
+  const rebuilt = [...amounts.entries()].map(([month, amount], index) => ({
+    id: `${contract.id}-report-${month}`,
+    label: normal[index]?.label || `القسط ${index + 1}`,
+    due: normal[index]?.due || `${month}-01`,
+    amount,
+    kind: "installment" as const,
+  }));
+  return [
+    ...contract.installments.filter((i) => i.kind === "deposit"),
+    ...rebuilt,
+  ];
+};
+
 const seed: Contract[] = [
   {
     id: "demo",
@@ -2226,7 +2266,7 @@ function CompanyInstallmentDistribution({
         .reduce(
           (sum, c) =>
             sum +
-            c.installments
+            installmentsForCompanyReport(c)
               .filter(
                 (i) =>
                   Number(i.due.slice(0, 4)) === year &&
