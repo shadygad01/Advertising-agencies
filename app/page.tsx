@@ -1928,16 +1928,10 @@ function PeriodEditForm({
       alert("لا يمكن أن تقل قيمة الاتفاق الجديدة عن المبلغ المدفوع بالفعل.");
       return;
     }
-    const installments = contract.installments.map((i) => ({ ...i }));
-    const lastIndex = installments.length - 1;
-    if (
-      lastIndex < 0 ||
-      installments[lastIndex].amount + (newTotal - oldTotal) < 0
-    ) {
-      alert("التعديل أكبر من قيمة آخر قسط. راجع جدول السداد أولًا.");
-      return;
-    }
-    installments[lastIndex].amount += newTotal - oldTotal;
+    const depositTotal = contract.installments.filter(i => i.kind === "deposit").reduce((s, i) => s + i.amount, 0);
+    const normal = contract.installments.filter(i => i.kind === "installment").sort((a, b) => a.due.localeCompare(b.due));
+    const remaining = Math.max(0, newTotal - depositTotal); const halfMonth = Math.min(partialStartMonthAmount(start, quantity, unit), remaining); const each = normal.length ? (remaining - halfMonth) / normal.length : 0;
+    const installments = contract.installments.map(i => { if (i.kind === "deposit") return { ...i }; const index = normal.findIndex(x => x.id === i.id); const amount = index === 0 ? each + halfMonth : index === normal.length - 1 ? remaining - (each + halfMonth) - each * (normal.length - 2) : each; return { ...i, amount }; });
     const signs = contract.signs.length
       ? contract.signs.map((s, i) =>
           i === 0 ? { ...s, start, end, cost: newTotal } : s,
@@ -1982,7 +1976,7 @@ function PeriodEditForm({
         <strong>القيمة الجديدة: {money(newTotal)}</strong>
       </div>
       <p className="form-hint">
-        سيتم تعديل آخر قسط تلقائيًا بفارق القيمة مع الحفاظ على الدفعات المسجلة.
+        بداية العرض بعد يوم 1 تُحسب بنصف شهر ثابت 50% وتُضاف إلى القسط الأول فقط، دون حساب الأيام.
       </p>
       <button className="primary submit">حفظ تعديل فترة العرض</button>
     </form>
