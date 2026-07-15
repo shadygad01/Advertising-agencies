@@ -52,6 +52,7 @@ const money = (n: number) =>
   " ج.م";
 const uid = () => Math.random().toString(36).slice(2) + Date.now().toString(36);
 const today = () => new Date().toISOString().slice(0, 10);
+const agreementValueForMonth = (c: Contract, year: number, month: number) => { const startText = c.displayStart || c.signs[0]?.start; const endText = c.signs[0]?.end; if (!startText || !endText) return 0; const monthStart = new Date(year, month, 1, 12); const monthEnd = new Date(year, month + 1, 0, 12); const start = new Date(startText + "T12:00:00"); const end = new Date(endText + "T12:00:00"); const from = start > monthStart ? start : monthStart; const to = end < monthEnd ? end : monthEnd; if (from > to) return 0; const activeDays = Math.floor((to.getTime() - from.getTime()) / 86400000) + 1; const daysInMonth = monthEnd.getDate(); return Math.round(((c.quantity || 1) * (c.monthlyUnitPrice || 0) * activeDays / daysInMonth) * 100) / 100; };
 
 const seed: Contract[] = [
   {
@@ -606,6 +607,8 @@ export default function Home() {
                 السنة المالية {year} · تاريخ التقرير {today()}
               </p>
             </div>
+            {reportCompany && <div className="panel report-table"><div className="panel-head"><div><h2>أصل الاتفاق حسب شهور العرض</h2><p>قيمة العرض الشهرية قبل النظر إلى مواعيد الأقساط والسداد</p></div></div><table><thead><tr><th>الاتفاق</th>{monthsAr.map(m => <th key={m}>{m}</th>)}<th>الإجمالي</th></tr></thead><tbody>{reportContracts.map(c => { const vals = monthsAr.map((_, i) => agreementValueForMonth(c, year, i)); return <tr key={`origin-${c.id}`}><td><b>{c.title}</b><small>{c.signs[0]?.location} · {c.quantity || 1} يافطة × {money(c.monthlyUnitPrice || 0)}</small></td>{vals.map((v, i) => <td key={i}>{v ? new Intl.NumberFormat("ar-EG", { maximumFractionDigits: 0 }).format(v) : "—"}</td>)}<td><b>{new Intl.NumberFormat("ar-EG", { maximumFractionDigits: 0 }).format(vals.reduce((s, v) => s + v, 0))}</b></td></tr>})}<tr className="total-row"><td>أصل المستحق لكل شهر</td>{monthsAr.map((_, i) => { const total = reportContracts.reduce((s, c) => s + agreementValueForMonth(c, year, i), 0); return <td key={i}>{total ? new Intl.NumberFormat("ar-EG", { maximumFractionDigits: 0 }).format(total) : "—"}</td>})}<td>{new Intl.NumberFormat("ar-EG", { maximumFractionDigits: 0 }).format(reportContracts.reduce((sum, c) => sum + monthsAr.reduce((s, _, i) => s + agreementValueForMonth(c, year, i), 0), 0))}</td></tr></tbody></table></div>}
+            <div className="panel-head report-section-label"><div><h2>جدول الأقساط المتفق عليه</h2><p>المبالغ طبقًا لمواعيد السداد المسجلة</p></div></div>
             <div className="panel report-table">
               <table>
                 <thead>
