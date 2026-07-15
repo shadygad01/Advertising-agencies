@@ -76,6 +76,44 @@ const agreementValueForMonth = (c: Contract, year: number, month: number) => {
 };
 const partialStartMonthAmount = (startText: string, quantity: number, unitPrice: number) => { if (!startText) return 0; const start = new Date(startText + "T12:00:00"); if (start.getDate() === 1) return 0; if (start.getDate() === 15) return Math.round(quantity * unitPrice * 50) / 100; const days = new Date(start.getFullYear(), start.getMonth() + 1, 0).getDate(); return Math.round(quantity * unitPrice * (days - start.getDate() + 1) / days * 100) / 100; };
 
+const normalizeMidMonthInstallments = (contract: Contract) => {
+  const startText = contract.displayStart || contract.signs[0]?.start || "";
+  const start = startText ? new Date(startText + "T12:00:00") : null;
+  const quantity = contract.quantity || 1;
+  const unitPrice = contract.monthlyUnitPrice || 0;
+  const duration = contract.durationMonths || 0;
+  const normal = contract.installments
+    .filter((i) => i.kind === "installment")
+    .sort((a, b) => a.due.localeCompare(b.due));
+  if (!start || start.getDate() !== 15 || !unitPrice || !normal.length || duration % 1 !== 0.5)
+    return contract;
+
+  const depositTotal = contract.installments
+    .filter((i) => i.kind === "deposit")
+    .reduce((sum, i) => sum + i.amount, 0);
+  const total = quantity * unitPrice * duration;
+  const remaining = Math.max(0, total - depositTotal);
+  const halfMonth = Math.min(quantity * unitPrice * 0.5, remaining);
+  const fullPart = (remaining - halfMonth) / normal.length;
+  const normalized = contract.installments.map((i) => {
+    if (i.kind === "deposit") return i;
+    const index = normal.findIndex((item) => item.id === i.id);
+    const amount = index === 0
+      ? fullPart + halfMonth
+      : index === normal.length - 1
+        ? remaining - (fullPart + halfMonth) - fullPart * (normal.length - 2)
+        : fullPart;
+    return { ...i, amount };
+  });
+  return {
+    ...contract,
+    installments: normalized,
+    signs: contract.signs.map((sign, index) =>
+      index === 0 ? { ...sign, cost: total } : sign,
+    ),
+  };
+};
+
 const seed: Contract[] = [
   {
     id: "demo",
@@ -168,7 +206,9 @@ export default function Home() {
     const saved =
       localStorage.getItem(KEY) ||
       localStorage.getItem("ad-expense-planner-v1");
-    const loaded: Contract[] = saved ? JSON.parse(saved) : seed;
+    const loaded: Contract[] = (saved ? JSON.parse(saved) : seed).map(
+      normalizeMidMonthInstallments,
+    );
     const savedCompanyPayments = localStorage.getItem("ad-company-payments-v1");
     if (savedCompanyPayments)
       setCompanyPayments(JSON.parse(savedCompanyPayments));
