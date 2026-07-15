@@ -1193,7 +1193,7 @@ function AgreementCard({
             تعديل أول قسط
           </button>
           <button className="text-btn" onClick={() => setEditing("quantity")}>
-            تعديل عدد اليافطات
+            تعديل العدد والسعر
           </button>
           <button className="danger-link" onClick={onDelete}>
             حذف الاتفاق
@@ -1261,7 +1261,7 @@ function AgreementCard({
         </Modal>
       )}
       {editing === "quantity" && (
-        <Modal title="تعديل عدد اليافطات" close={() => setEditing(null)}>
+        <Modal title="تعديل عدد اليافطات وسعر الشهر" close={() => setEditing(null)}>
           <QuantityEditForm contract={c} onSave={(updated) => { window.dispatchEvent(new CustomEvent("agreement-updated", { detail: updated })); setEditing(null); }} />
         </Modal>
       )}
@@ -1716,7 +1716,7 @@ function FirstDueEditForm({ contract, onSave }: { contract: Contract; onSave: (c
 }
 
 function QuantityEditForm({ contract, onSave }: { contract: Contract; onSave: (c: Contract) => void }) {
-  const [quantity, setQuantity] = useState(contract.quantity || contract.signs.length || 1); const unit = contract.monthlyUnitPrice || 0; const months = contract.durationMonths || 1; const oldTotal = contract.installments.reduce((s, i) => s + i.amount, 0); const newTotal = quantity * unit * months;
-  function save(e: React.FormEvent) { e.preventDefault(); const installments = contract.installments.map(i => ({ ...i })); const last = installments.length - 1; const delta = newTotal - oldTotal; if (last < 0 || installments[last].amount + delta < 0) { alert("القيمة الجديدة أقل من قيمة الأقساط المسجلة. راجع العدد أو جدول السداد."); return; } installments[last].amount += delta; const signs = contract.signs.map((s, i) => i === 0 ? { ...s, cost: newTotal } : s); onSave({ ...contract, quantity, installments, signs }); }
-  return <form className="form" onSubmit={save}><label>عدد اليافطات الصحيح<input type="number" min="1" required value={quantity} onChange={e => setQuantity(Number(e.target.value))}/></label><div className="calculation-box"><span>{quantity} يافطة</span><i>×</i><span>{money(unit)} شهريًا</span><i>×</i><span>{months} شهر</span><strong>{money(newTotal)}</strong></div><p className="form-hint">سيتم تحديث إجمالي الاتفاق وتعديل آخر قسط تلقائيًا بفارق القيمة.</p><button className="primary submit">حفظ عدد اليافطات</button></form>;
+  const [quantity, setQuantity] = useState(contract.quantity || contract.signs.length || 1); const [unit, setUnit] = useState(contract.monthlyUnitPrice || 0); const months = contract.durationMonths || 1; const oldTotal = contract.installments.reduce((s, i) => s + i.amount, 0); const newTotal = quantity * unit * months;
+  function save(e: React.FormEvent) { e.preventDefault(); if (!contract.installments.length || oldTotal <= 0) return; const installments = contract.installments.map(i => ({ ...i, amount: Math.round((i.amount / oldTotal) * newTotal * 100) / 100 })); const distributed = installments.reduce((s, i) => s + i.amount, 0); installments[installments.length - 1].amount += newTotal - distributed; const signs = contract.signs.map((s, i) => i === 0 ? { ...s, cost: newTotal } : s); onSave({ ...contract, quantity, monthlyUnitPrice: unit, installments, signs }); }
+  return <form className="form" onSubmit={save}><div className="form-grid"><label>عدد اليافطات الصحيح<input type="number" min="1" required value={quantity} onChange={e => setQuantity(Number(e.target.value))}/></label><label>سعر الشهر الصحيح لليافطة<input type="number" min="1" required value={unit || ""} onChange={e => setUnit(Number(e.target.value))}/></label></div><div className="calculation-box"><span>{quantity} يافطة</span><i>×</i><span>{money(unit)} شهريًا</span><i>×</i><span>{months} شهر</span><strong>{money(newTotal)}</strong></div><div className="balance-box">القيمة السابقة: <b>{money(oldTotal)}</b> · القيمة الجديدة: <b>{money(newTotal)}</b></div><p className="form-hint">سيُعاد حساب جميع الأقساط من البداية بنفس مواعيدها ونِسَب توزيعها الحالية، وليس تعديل آخر قسط فقط.</p><button className="primary submit">إعادة الحساب وحفظ التعديل</button></form>;
 }
