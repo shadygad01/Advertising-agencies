@@ -1167,7 +1167,7 @@ function AgreementCard({
   contract: Contract;
   onDelete: () => void;
 }) {
-  const [editing, setEditing] = useState<"period" | "firstDue" | null>(null);
+  const [editing, setEditing] = useState<"period" | "firstDue" | "quantity" | null>(null);
   const total = c.installments.reduce((s, i) => s + i.amount, 0);
   const companyPaymentStore: Record<string, Payment[]> = typeof window === "undefined" ? {} : JSON.parse(localStorage.getItem("ad-company-payments-v1") || "{}");
   const paid = (companyPaymentStore[c.company] || []).reduce((s, p) => s + p.amount, 0);
@@ -1191,6 +1191,9 @@ function AgreementCard({
           </button>
           <button className="text-btn" onClick={() => setEditing("firstDue")}>
             تعديل أول قسط
+          </button>
+          <button className="text-btn" onClick={() => setEditing("quantity")}>
+            تعديل عدد اليافطات
           </button>
           <button className="danger-link" onClick={onDelete}>
             حذف الاتفاق
@@ -1255,6 +1258,11 @@ function AgreementCard({
       {editing === "firstDue" && (
         <Modal title="تعديل موعد أول قسط" close={() => setEditing(null)}>
           <FirstDueEditForm contract={c} onSave={(updated) => { window.dispatchEvent(new CustomEvent("agreement-updated", { detail: updated })); setEditing(null); }} />
+        </Modal>
+      )}
+      {editing === "quantity" && (
+        <Modal title="تعديل عدد اليافطات" close={() => setEditing(null)}>
+          <QuantityEditForm contract={c} onSave={(updated) => { window.dispatchEvent(new CustomEvent("agreement-updated", { detail: updated })); setEditing(null); }} />
         </Modal>
       )}
     </article>
@@ -1705,4 +1713,10 @@ function FirstDueEditForm({ contract, onSave }: { contract: Contract; onSave: (c
   const [date, setDate] = useState(target?.due || today());
   function save(e: React.FormEvent) { e.preventDefault(); if (!target) return; onSave({ ...contract, installments: contract.installments.map(i => i.id === target.id ? { ...i, due: date } : i) }); }
   return <form className="form" onSubmit={save}><div className="balance-box">القسط: <b>{target?.label || "أول قسط"}</b> · القيمة: <b>{money(target?.amount || 0)}</b></div><label>موعد السداد الصحيح<input type="date" required value={date} onChange={e => setDate(e.target.value)}/></label><p className="form-hint">سيتم تعديل تاريخ هذا القسط فقط، ثم يعيد النظام ترتيب الاستحقاقات حسب التاريخ.</p><button className="primary submit">حفظ موعد أول قسط</button></form>;
+}
+
+function QuantityEditForm({ contract, onSave }: { contract: Contract; onSave: (c: Contract) => void }) {
+  const [quantity, setQuantity] = useState(contract.quantity || contract.signs.length || 1); const unit = contract.monthlyUnitPrice || 0; const months = contract.durationMonths || 1; const oldTotal = contract.installments.reduce((s, i) => s + i.amount, 0); const newTotal = quantity * unit * months;
+  function save(e: React.FormEvent) { e.preventDefault(); const installments = contract.installments.map(i => ({ ...i })); const last = installments.length - 1; const delta = newTotal - oldTotal; if (last < 0 || installments[last].amount + delta < 0) { alert("القيمة الجديدة أقل من قيمة الأقساط المسجلة. راجع العدد أو جدول السداد."); return; } installments[last].amount += delta; const signs = contract.signs.map((s, i) => i === 0 ? { ...s, cost: newTotal } : s); onSave({ ...contract, quantity, installments, signs }); }
+  return <form className="form" onSubmit={save}><label>عدد اليافطات الصحيح<input type="number" min="1" required value={quantity} onChange={e => setQuantity(Number(e.target.value))}/></label><div className="calculation-box"><span>{quantity} يافطة</span><i>×</i><span>{money(unit)} شهريًا</span><i>×</i><span>{months} شهر</span><strong>{money(newTotal)}</strong></div><p className="form-hint">سيتم تحديث إجمالي الاتفاق وتعديل آخر قسط تلقائيًا بفارق القيمة.</p><button className="primary submit">حفظ عدد اليافطات</button></form>;
 }
