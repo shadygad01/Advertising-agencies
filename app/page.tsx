@@ -30,7 +30,7 @@ type Contract = {
   installments: Installment[];
   payments: Payment[];
   notes: string;
-  agreementType?: "campaign" | "printing";
+  agreementType?: "campaign" | "printing" | "companyDeposit";
 };
 
 const KEY = "ad-expense-planner-v2";
@@ -67,6 +67,26 @@ const money = (n: number) =>
   " ج.م";
 const uid = () => Math.random().toString(36).slice(2) + Date.now().toString(36);
 const today = () => new Date().toISOString().slice(0, 10);
+const validateDepositSchedule = (
+  deposit: number,
+  total: number,
+  depositDate: string,
+  installments: Installment[],
+) => {
+  if (deposit < 0 || deposit > total) {
+    alert("دفعة التعاقد يجب ألا تتجاوز إجمالي قيمة الاتفاق.");
+    return false;
+  }
+  if (!deposit) return true;
+  const laterPriorityItem = installments
+    .filter((i) => i.kind === "installment")
+    .some((i) => i.due < depositDate);
+  if (laterPriorityItem) {
+    alert("تاريخ دفعة التعاقد يجب أن يسبق تاريخ أول قسط أو يوافقه.");
+    return false;
+  }
+  return true;
+};
 const agreementValueForMonth = (c: Contract, year: number, month: number) => {
   const startText = c.displayStart || c.signs[0]?.start;
   const endText = c.signs[0]?.end;
@@ -1452,6 +1472,7 @@ function ContractForm({ onSave }: { onSave: (c: Contract) => void }) {
         });
       }
     }
+    if (!validateDepositSchedule(deposit, total, depositDate, installments)) return;
     if (installments.some((i) => new Date(i.due + "T12:00:00") > limit)) {
       alert("موعد أي دفعة يجب ألا يتجاوز 12 شهرًا من تاريخ التعاقد.");
       return;
@@ -1590,6 +1611,7 @@ function ContractForm({ onSave }: { onSave: (c: Contract) => void }) {
           <input name="depositDate" type="date" defaultValue={today()} />
         </label>
       </div>
+      <p className="form-hint">تُسجل دفعة التعاقد كاستحقاق مستقل بأولوية السداد، وتُوزع الأقساط على المبلغ المتبقي بعدها.</p>
       <div className="tabs">
         <button
           type="button"
@@ -1708,7 +1730,7 @@ function AgreementCard({
   onDelete: () => void;
 }) {
   const [editing, setEditing] = useState<
-    "period" | "firstDue" | "quantity" | null
+    "period" | "firstDue" | "installmentCount" | "quantity" | null
   >(null);
   const total = c.installments.reduce((s, i) => s + i.amount, 0);
   const companyPaymentStore: Record<string, Payment[]> =
@@ -1721,6 +1743,8 @@ function AgreementCard({
   );
   const sign = c.signs[0];
   const isPrinting = c.agreementType === "printing";
+  const isCompanyDeposit = c.agreementType === "companyDeposit";
+  const isGeneralObligation = isPrinting || isCompanyDeposit;
   return (
     <article className="contract-card">
       <div className="contract-top">
@@ -1729,20 +1753,23 @@ function AgreementCard({
           <div>
             <h3>{c.title}</h3>
             <p>
-              {isPrinting
-                ? `التزام طباعة أُنشئ بتاريخ ${c.start}`
+              {isGeneralObligation
+                ? `${isCompanyDeposit ? "دفعة تعاقد على المشاع" : "التزام طباعة"} · الاستحقاق ${c.installments[0]?.due || c.start}`
                 : `${sign?.location} · الاتفاق ${c.start} · العرض ${c.displayStart || sign?.start}`}
             </p>
           </div>
         </div>
         <div className="card-actions">
-          {!isPrinting && (
+          {!isGeneralObligation && (
             <>
               <button className="text-btn" onClick={() => setEditing("period")}>
                 تعديل فترة العرض
               </button>
               <button className="text-btn" onClick={() => setEditing("firstDue")}>
                 تعديل أول قسط
+              </button>
+              <button className="text-btn" onClick={() => setEditing("installmentCount")}>
+                تعديل عدد الأقساط
               </button>
               <button className="text-btn" onClick={() => setEditing("quantity")}>
                 تعديل العدد والسعر
@@ -1754,15 +1781,15 @@ function AgreementCard({
           </button>
         </div>
       </div>
-      {isPrinting ? (
+      {isGeneralObligation ? (
         <div className="agreement-formula">
           <span className="formula-total">
-            <small>قيمة التزام عقد الطباعة</small>
+            <small>{isCompanyDeposit ? "قيمة دفعة التعاقد العامة" : "قيمة التزام عقد الطباعة"}</small>
             <b>{money(total)}</b>
           </span>
           <span>
-            <small>شهر الاستحقاق</small>
-            <b>{c.start.slice(0, 7)}</b>
+            <small>تاريخ الاستحقاق</small>
+            <b>{c.installments[0]?.due || c.start}</b>
           </span>
         </div>
       ) : <div className="agreement-formula">
@@ -1786,7 +1813,7 @@ function AgreementCard({
           <b>{money(total)}</b>
         </span>
       </div>}
-      {!isPrinting && <div className="contract-grid">
+      {!isGeneralObligation && <div className="contract-grid">
         <div>
           <small>فترة العرض</small>
           <b>
@@ -1802,8 +1829,8 @@ function AgreementCard({
           <b>{money(total)}</b>
         </div>
         <div>
-          <small>عدد الدفعات</small>
-          <b>{c.installments.length}</b>
+          <small>عدد الأقساط</small>
+          <b>{c.installments.filter((i) => i.kind === "installment").length}</b>
         </div>
       </div>}
       {c.notes && <p className="note">{c.notes}</p>}
@@ -1849,6 +1876,19 @@ function AgreementCard({
           />
         </Modal>
       )}
+      {editing === "installmentCount" && (
+        <Modal title="تعديل عدد أقساط الإعلان" close={() => setEditing(null)}>
+          <InstallmentCountEditForm
+            contract={c}
+            onSave={(updated) => {
+              window.dispatchEvent(
+                new CustomEvent("agreement-updated", { detail: updated }),
+              );
+              setEditing(null);
+            }}
+          />
+        </Modal>
+      )}
     </article>
   );
 }
@@ -1873,7 +1913,7 @@ function AgreementForm({
   const [displayEnd, setDisplayEnd] = useState("");
   const [mode, setMode] = useState<"auto" | "manual">("auto");
   const [manual, setManual] = useState<Installment[]>([blankInst()]);
-  const [agreementType, setAgreementType] = useState<"campaign" | "printing">("campaign");
+  const [agreementType, setAgreementType] = useState<"campaign" | "printing" | "companyDeposit">("campaign");
   const billingMonths = (start: string, end: string) => {
     if (!start || !end || end < start) return 0;
     const a = new Date(start + "T12:00:00");
@@ -1921,6 +1961,29 @@ function AgreementForm({
       });
       return;
     }
+    if (agreementType === "companyDeposit") {
+      const amount = Number(fd.get("companyDepositAmount") || 0);
+      const due = String(fd.get("companyDepositDue") || today());
+      if (amount <= 0 || !due) return;
+      onSave({
+        id: uid(),
+        company: defaultCompany,
+        title: "دفعة تعاقد على المشاع",
+        start: today(),
+        notes: String(fd.get("companyDepositNotes") || ""),
+        agreementType: "companyDeposit",
+        signs: [],
+        installments: [{
+          id: uid(),
+          label: "دفعة تعاقد على المشاع",
+          due,
+          amount,
+          kind: "deposit",
+        }],
+        payments: [],
+      });
+      return;
+    }
     const agreementDate = String(fd.get("agreementDate"));
     const deposit = Number(fd.get("deposit") || 0);
     const depositDate = String(fd.get("depositDate") || agreementDate);
@@ -1957,6 +2020,7 @@ function AgreementForm({
         });
       }
     }
+    if (!validateDepositSchedule(deposit, total, depositDate, installments)) return;
     const scheduled = installments.reduce((s, i) => s + i.amount, 0);
     if (Math.abs(scheduled - total) > 0.01) {
       alert(
@@ -1998,6 +2062,9 @@ function AgreementForm({
           <button type="button" className={agreementType === "printing" ? "active" : ""} onClick={() => setAgreementType("printing")}>
             عقد طباعة
           </button>
+          <button type="button" className={agreementType === "companyDeposit" ? "active" : ""} onClick={() => setAgreementType("companyDeposit")}>
+            دفعة تعاقد على المشاع
+          </button>
         </div>
       )}
       {agreementType === "printing" ? (
@@ -2016,6 +2083,27 @@ function AgreementForm({
             </label>
           </div>
           <button className="primary submit">حفظ عقد الطباعة وإضافة الالتزام</button>
+        </>
+      ) : agreementType === "companyDeposit" ? (
+        <>
+          <div className="balance-box">
+            تُسجل كاستحقاق عام على حساب {defaultCompany} دون ربطها بإعلان، وتدخل في التوزيع حسب تاريخ استحقاقها مع باقي حسابات الشركة.
+          </div>
+          <div className="form-grid">
+            <label>
+              قيمة دفعة التعاقد
+              <input name="companyDepositAmount" type="number" min="1" step="0.01" required />
+            </label>
+            <label>
+              تاريخ الاستحقاق
+              <input name="companyDepositDue" type="date" defaultValue={today()} required />
+            </label>
+            <label className="wide">
+              البيان / الملاحظات
+              <input name="companyDepositNotes" placeholder="مثال: دفعة تعاقد عامة طبقًا للاتفاق مع الشركة" />
+            </label>
+          </div>
+          <button className="primary submit">حفظ دفعة التعاقد على حساب الشركة</button>
         </>
       ) : <>
       <div className="form-grid">
@@ -2114,6 +2202,7 @@ function AgreementForm({
           <input name="depositDate" type="date" defaultValue={today()} />
         </label>
       </div>
+      <p className="form-hint">تُضاف دفعة التعاقد إلى حساب الشركة في تاريخ استحقاقها، ثم تُحسب الأقساط من صافي قيمة الاتفاق بعد خصمها.</p>
       <div className="tabs">
         <button
           type="button"
@@ -2378,6 +2467,98 @@ function FirstDueEditForm({
   );
 }
 
+function InstallmentCountEditForm({
+  contract,
+  onSave,
+}: {
+  contract: Contract;
+  onSave: (c: Contract) => void;
+}) {
+  const normal = contract.installments
+    .filter((i) => i.kind === "installment")
+    .sort((a, b) => a.due.localeCompare(b.due));
+  const deposits = contract.installments.filter((i) => i.kind === "deposit");
+  const [count, setCount] = useState(Math.max(1, normal.length));
+  const firstDue = normal[0]?.due || today();
+  const installmentTotal = normal.reduce((sum, item) => sum + item.amount, 0);
+
+  function dueAfterMonths(dateText: string, offset: number) {
+    const source = new Date(`${dateText}T12:00:00`);
+    const targetMonth = new Date(
+      source.getFullYear(),
+      source.getMonth() + offset,
+      1,
+      12,
+    );
+    const lastDay = new Date(
+      targetMonth.getFullYear(),
+      targetMonth.getMonth() + 1,
+      0,
+      12,
+    ).getDate();
+    targetMonth.setDate(Math.min(source.getDate(), lastDay));
+    return `${targetMonth.getFullYear()}-${String(targetMonth.getMonth() + 1).padStart(2, "0")}-${String(targetMonth.getDate()).padStart(2, "0")}`;
+  }
+
+  function save(e: React.FormEvent) {
+    e.preventDefault();
+    const nextCount = Math.max(1, Math.min(12, count));
+    const partial = Math.min(
+      partialStartMonthAmount(
+        contract.displayStart || contract.signs[0]?.start || "",
+        contract.quantity || 1,
+        contract.monthlyUnitPrice || 0,
+      ),
+      installmentTotal,
+    );
+    const each = (installmentTotal - partial) / nextCount;
+    const rebuilt = Array.from({ length: nextCount }, (_, index) => ({
+      id: normal[index]?.id || uid(),
+      label: `القسط ${index + 1}`,
+      due: dueAfterMonths(firstDue, index),
+      amount:
+        index === 0
+          ? each + partial
+          : index === nextCount - 1
+            ? installmentTotal - (each + partial) - each * (nextCount - 2)
+            : each,
+      kind: "installment" as const,
+    }));
+    onSave({ ...contract, installments: [...deposits, ...rebuilt] });
+  }
+
+  return (
+    <form className="form" onSubmit={save}>
+      <div className="balance-box">
+        صافي المبلغ الموزع على الأقساط: <b>{money(installmentTotal)}</b>
+        {deposits.length > 0 && <> · دفعة التعاقد محفوظة دون تعديل</>}
+      </div>
+      <div className="form-grid">
+        <label>
+          عدد الأقساط الحالي
+          <input type="number" value={normal.length} disabled />
+        </label>
+        <label>
+          عدد الأقساط الجديد
+          <input
+            type="number"
+            min="1"
+            max="12"
+            required
+            value={count}
+            onChange={(e) => setCount(Number(e.target.value))}
+          />
+        </label>
+      </div>
+      <p className="form-hint">
+        يبدأ الجدول الجديد من {firstDue} بفاصل شهر بين الأقساط. بعد الحفظ يعاد
+        توزيع سداد الشركة على جميع الاستحقاقات حسب ترتيب تواريخها.
+      </p>
+      <button className="primary submit">إعادة توزيع الأقساط وحفظ التعديل</button>
+    </form>
+  );
+}
+
 function QuantityEditForm({
   contract,
   onSave,
@@ -2473,7 +2654,7 @@ function CompanySummaryReport({
     const paid = (payments[company] || []).reduce((s, p) => s + p.amount, 0);
     return {
       company,
-      campaigns: list.filter((c) => c.agreementType !== "printing").length,
+      campaigns: list.filter((c) => !c.agreementType || c.agreementType === "campaign").length,
       total,
       paid,
       remaining: Math.max(0, total - paid),
