@@ -989,8 +989,8 @@ export default function Home() {
             )}
             <div className="panel-head report-section-label">
               <div>
-                <h2>جدول الأقساط المتفق عليه</h2>
-                <p>المبالغ طبقًا لمواعيد السداد المسجلة</p>
+                <h2>جدول الأقساط المتبقية بعد السداد</h2>
+                <p>المبالغ المتبقية بعد توزيع دفعات الشركة على أقدم الأقساط</p>
               </div>
             </div>
             <div className="panel report-table">
@@ -1006,7 +1006,7 @@ export default function Home() {
                 </thead>
                 <tbody>
                   {reportContracts.map((c) => {
-                    const rows = allocate(c);
+                    const rows = allRows.filter((row) => row.contractId === c.id);
                     const vals = monthsAr.map((_, i) =>
                       rows
                         .filter(
@@ -1014,7 +1014,7 @@ export default function Home() {
                             Number(r.due.slice(0, 4)) === year &&
                             Number(r.due.slice(5, 7)) === i + 1,
                         )
-                        .reduce((s, r) => s + r.amount, 0),
+                        .reduce((s, r) => s + r.remaining, 0),
                     );
                     return (
                       <tr key={c.id}>
@@ -1043,14 +1043,14 @@ export default function Home() {
                     <td>إجمالي الشهر</td>
                     {reportMonthData.map((m) => (
                       <td key={m.name}>
-                        {m.due
-                          ? new Intl.NumberFormat("ar-EG").format(m.due)
+                        {m.remaining
+                          ? new Intl.NumberFormat("ar-EG").format(m.remaining)
                           : "—"}
                       </td>
                     ))}
                     <td>
                       {new Intl.NumberFormat("ar-EG").format(
-                        reportMonthData.reduce((s, m) => s + m.due, 0),
+                        reportMonthData.reduce((s, m) => s + m.remaining, 0),
                       )}
                     </td>
                   </tr>
