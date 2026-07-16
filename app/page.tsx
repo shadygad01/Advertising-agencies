@@ -475,6 +475,25 @@ export default function Home() {
       return next;
     });
   }
+  function resetCompanyPayments(company: string) {
+    const amount = (companyPayments[company] || []).reduce(
+      (sum, payment) => sum + payment.amount,
+      0,
+    );
+    if (!amount) return;
+    if (
+      !confirm(
+        `إعادة ضبط إجمالي المدفوع لشركة ${company} وحذف الرصيد المسجل ${money(amount)}؟ سيتم تحديث جميع التقارير والأقساط.`,
+      )
+    )
+      return;
+    setCompanyPayments((current) => {
+      const next = { ...current };
+      delete next[company];
+      localStorage.setItem("ad-company-payments-v1", JSON.stringify(next));
+      return next;
+    });
+  }
   function backup() {
     const blob = new Blob(
       [
@@ -864,6 +883,7 @@ export default function Home() {
               companies={reportCompany ? [reportCompany] : companies}
               contracts={contracts}
               payments={companyPayments}
+              onResetPayments={resetCompanyPayments}
             />
             <CompanyInstallmentDistribution
               companies={reportCompany ? [reportCompany] : companies}
@@ -2351,10 +2371,12 @@ function CompanySummaryReport({
   companies,
   contracts,
   payments,
+  onResetPayments,
 }: {
   companies: string[];
   contracts: Contract[];
   payments: Record<string, Payment[]>;
+  onResetPayments: (company: string) => void;
 }) {
   const rows = companies.map((company) => {
     const list = contracts.filter((c) => c.company === company);
@@ -2397,7 +2419,18 @@ function CompanySummaryReport({
               </td>
               <td>{r.campaigns}</td>
               <td>{money(r.total)}</td>
-              <td>{money(r.paid)}</td>
+              <td>
+                {money(r.paid)}
+                {r.paid > 0 && (
+                  <button
+                    type="button"
+                    className="danger-link print-hide"
+                    onClick={() => onResetPayments(r.company)}
+                  >
+                    إعادة ضبط المدفوع
+                  </button>
+                )}
+              </td>
               <td>{money(r.remaining)}</td>
             </tr>
           ))}
