@@ -892,12 +892,6 @@ export default function Home() {
               payments={companyPayments}
               onResetPayments={resetCompanyPayments}
             />
-            <PaymentsReport
-              companies={reportCompany ? [reportCompany] : companies}
-              payments={companyPayments}
-              year={year}
-              selectedCompany={reportCompany}
-            />
             <CompanyInstallmentDistribution
               companies={reportCompany ? [reportCompany] : companies}
               contracts={contracts}
