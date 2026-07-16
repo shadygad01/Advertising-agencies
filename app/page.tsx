@@ -946,6 +946,9 @@ export default function Home() {
                     <AgreementCard
                       key={c.id}
                       contract={c}
+                      companyContracts={contracts.filter(
+                        (item) => item.company === selectedCompany,
+                      )}
                       onDelete={() => {
                         if (!confirm("حذف هذا الاتفاق؟")) return;
                         setContracts((v) => v.filter((x) => x.id !== c.id));
@@ -1866,13 +1869,15 @@ function ContractForm({ onSave }: { onSave: (c: Contract) => void }) {
 
 function AgreementCard({
   contract: c,
+  companyContracts,
   onDelete,
 }: {
   contract: Contract;
+  companyContracts: Contract[];
   onDelete: () => void;
 }) {
   const [editing, setEditing] = useState<
-    "period" | "firstDue" | "installmentCount" | "contractDeposit" | "quantity" | null
+    "period" | "firstDue" | "installmentCount" | "contractDeposit" | "depositDue" | "quantity" | null
   >(null);
   const total = c.installments.reduce((s, i) => s + i.amount, 0);
   const companyPaymentStore: Record<string, Payment[]> =
@@ -1920,6 +1925,11 @@ function AgreementCard({
                 تعديل العدد والسعر
               </button>
             </>
+          )}
+          {isCompanyDeposit && (
+            <button className="text-btn" onClick={() => setEditing("depositDue")}>
+              تعديل تاريخ الاستحقاق
+            </button>
           )}
           <button className="danger-link" onClick={onDelete}>
             حذف الاتفاق
@@ -2038,6 +2048,20 @@ function AgreementCard({
         <Modal title={`دفعة تعاقد — ${c.title}`} close={() => setEditing(null)}>
           <ContractDepositEditForm
             contract={c}
+            onSave={(updated) => {
+              window.dispatchEvent(
+                new CustomEvent("agreement-updated", { detail: updated }),
+              );
+              setEditing(null);
+            }}
+          />
+        </Modal>
+      )}
+      {editing === "depositDue" && isCompanyDeposit && (
+        <Modal title="تعديل موعد دفعة التعاقد" close={() => setEditing(null)}>
+          <CompanyDepositDueEditForm
+            contract={c}
+            companyContracts={companyContracts}
             onSave={(updated) => {
               window.dispatchEvent(
                 new CustomEvent("agreement-updated", { detail: updated }),
@@ -2666,6 +2690,61 @@ function InstallmentCountEditForm({
         توزيع سداد الشركة على جميع الاستحقاقات حسب ترتيب تواريخها.
       </p>
       <button className="primary submit">إعادة توزيع الأقساط وحفظ التعديل</button>
+    </form>
+  );
+}
+
+function CompanyDepositDueEditForm({
+  contract,
+  companyContracts,
+  onSave,
+}: {
+  contract: Contract;
+  companyContracts: Contract[];
+  onSave: (c: Contract) => void;
+}) {
+  const deposit = contract.installments[0];
+  const [date, setDate] = useState(deposit?.due || today());
+  const firstMonthlyDue = companyContracts
+    .filter((item) => !item.agreementType || item.agreementType === "campaign")
+    .flatMap((item) => installmentsForCompanyReport(item))
+    .filter((item) => item.kind === "installment")
+    .sort((a, b) => a.due.localeCompare(b.due))[0]?.due;
+
+  function save(e: React.FormEvent) {
+    e.preventDefault();
+    if (!deposit) return;
+    if (firstMonthlyDue && date > firstMonthlyDue) {
+      alert(`موعد دفعة التعاقد يجب ألا يتجاوز موعد أول قسط شهري (${firstMonthlyDue}).`);
+      return;
+    }
+    onSave({
+      ...contract,
+      installments: contract.installments.map((item) =>
+        item.id === deposit.id ? { ...item, due: date } : item,
+      ),
+    });
+  }
+
+  return (
+    <form className="form" onSubmit={save}>
+      <div className="balance-box">
+        قيمة دفعة التعاقد: <b>{money(deposit?.amount || 0)}</b>
+      </div>
+      <label>
+        تاريخ الاستحقاق الجديد
+        <input
+          type="date"
+          required
+          max={firstMonthlyDue}
+          value={date}
+          onChange={(e) => setDate(e.target.value)}
+        />
+      </label>
+      <p className="form-hint">
+        ستنتقل دفعة التعاقد إلى شهر التاريخ الجديد، ويُعاد حساب إجمالي استحقاقات الشهر وتقارير الشركة تلقائيًا دون تغيير قيمتها.
+      </p>
+      <button className="primary submit">حفظ التاريخ وإعادة الحساب</button>
     </form>
   );
 }
