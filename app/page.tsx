@@ -266,7 +266,7 @@ export default function Home() {
   >("dashboard");
   const [year, setYear] = useState(currentFiscalYear);
   const [modal, setModal] = useState<
-    "newCompanyContract" | "agreement" | "payment" | "editPayment" | null
+    "newCompanyContract" | "agreement" | "companyDeposit" | "payment" | "editPayment" | null
   >(null);
   const [editingPayment, setEditingPayment] = useState<{
     company: string;
@@ -747,14 +747,24 @@ export default function Home() {
                     : `${companies.length} شركة نتعامل معها`}
                 </p>
               </div>
-              <button
-                className="primary"
-                onClick={() =>
-                  setModal(selectedCompany ? "agreement" : "newCompanyContract")
-                }
-              >
-                ＋ {selectedCompany ? "اتفاق جديد" : "عقد جديد"}
-              </button>
+              <div className="header-actions print-hide">
+                {selectedCompany && (
+                  <button
+                    className="secondary"
+                    onClick={() => setModal("companyDeposit")}
+                  >
+                    ＋ دفعة تعاقد على المشاع
+                  </button>
+                )}
+                <button
+                  className="primary"
+                  onClick={() =>
+                    setModal(selectedCompany ? "agreement" : "newCompanyContract")
+                  }
+                >
+                  ＋ {selectedCompany ? "اتفاق جديد" : "عقد جديد"}
+                </button>
+              </div>
             </div>
             {!selectedCompany ? (
               <div className="companies-grid">
@@ -1144,17 +1154,20 @@ export default function Home() {
         )}
       </main>
 
-      {(modal === "newCompanyContract" || modal === "agreement") && (
+      {(modal === "newCompanyContract" || modal === "agreement" || modal === "companyDeposit") && (
         <Modal
           title={
-            modal === "agreement" && selectedCompany
+            modal === "companyDeposit"
+              ? `دفعة تعاقد على المشاع — ${selectedCompany}`
+              : modal === "agreement" && selectedCompany
               ? `اتفاق جديد — ${selectedCompany}`
               : "عقد جديد مع شركة جديدة"
           }
           close={() => setModal(null)}
         >
           <AgreementForm
-            defaultCompany={modal === "agreement" ? selectedCompany : ""}
+            defaultCompany={modal === "newCompanyContract" ? "" : selectedCompany}
+            initialAgreementType={modal === "companyDeposit" ? "companyDeposit" : "campaign"}
             onSave={(c) => {
               setContracts((v) => [...v, c]);
               setSelectedCompany(c.company);
@@ -1895,9 +1908,11 @@ function AgreementCard({
 
 function AgreementForm({
   defaultCompany,
+  initialAgreementType = "campaign",
   onSave,
 }: {
   defaultCompany: string;
+  initialAgreementType?: "campaign" | "printing" | "companyDeposit";
   onSave: (c: Contract) => void;
 }) {
   const blankInst = (): Installment => ({
@@ -1913,7 +1928,7 @@ function AgreementForm({
   const [displayEnd, setDisplayEnd] = useState("");
   const [mode, setMode] = useState<"auto" | "manual">("auto");
   const [manual, setManual] = useState<Installment[]>([blankInst()]);
-  const [agreementType, setAgreementType] = useState<"campaign" | "printing" | "companyDeposit">("campaign");
+  const [agreementType, setAgreementType] = useState<"campaign" | "printing" | "companyDeposit">(initialAgreementType);
   const billingMonths = (start: string, end: string) => {
     if (!start || !end || end < start) return 0;
     const a = new Date(start + "T12:00:00");
