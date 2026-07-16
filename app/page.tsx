@@ -228,7 +228,7 @@ export default function Home() {
   const [contracts, setContracts] = useState<Contract[]>([]);
   const [ready, setReady] = useState(false);
   const [view, setView] = useState<
-    "dashboard" | "contracts" | "payments" | "reports"
+    "dashboard" | "contracts" | "payments" | "reports" | "paidReports"
   >("dashboard");
   const [year, setYear] = useState(new Date().getFullYear());
   const [modal, setModal] = useState<
@@ -544,6 +544,7 @@ export default function Home() {
     { id: "contracts", label: "الشركات والاتفاقات", icon: "▤" },
     { id: "payments", label: "المدفوعات", icon: "◉" },
     { id: "reports", label: "التقارير السنوية", icon: "▦" },
+    { id: "paidReports", label: "المصروفات المسددة", icon: "▣" },
   ] as const;
 
   return (
@@ -1079,6 +1080,57 @@ export default function Home() {
                 </b>
               </span>
             </div>
+          </section>
+        )}
+
+        {view === "paidReports" && (
+          <section className="report">
+            <div className="section-title print-hide">
+              <div>
+                <h2>
+                  {reportCompany
+                    ? `المصروفات المسددة لشركة ${reportCompany}`
+                    : "المصروفات المسددة لكل شركات الإعلانات"}
+                </h2>
+                <p>دفعات السداد العامة غير المخصصة لحملة إعلانية معينة</p>
+              </div>
+              <div>
+                <select
+                  value={reportCompany}
+                  onChange={(e) => setReportCompany(e.target.value)}
+                >
+                  <option value="">كل الشركات</option>
+                  {companies.map((company) => (
+                    <option key={company}>{company}</option>
+                  ))}
+                </select>
+                <select
+                  value={year}
+                  onChange={(e) => setYear(Number(e.target.value))}
+                >
+                  {[year - 1, year, year + 1].map((itemYear) => (
+                    <option key={itemYear}>{itemYear}</option>
+                  ))}
+                </select>
+                <button className="primary" onClick={() => window.print()}>
+                  طباعة / حفظ PDF
+                </button>
+              </div>
+            </div>
+            <div className="print-title">
+              <h1>
+                {reportCompany
+                  ? `المصروفات المسددة لشركة ${reportCompany}`
+                  : "المصروفات المسددة لكل شركات الإعلانات"}
+              </h1>
+              <p>السنة المالية {year} · تاريخ التقرير {today()}</p>
+            </div>
+            <PaymentsReport
+              companies={reportCompany ? [reportCompany] : companies}
+              payments={companyPayments}
+              year={year}
+              selectedCompany={reportCompany}
+            />
           </section>
         )}
       </main>
