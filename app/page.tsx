@@ -67,6 +67,17 @@ const money = (n: number) =>
   " ج.م";
 const uid = () => Math.random().toString(36).slice(2) + Date.now().toString(36);
 const today = () => new Date().toISOString().slice(0, 10);
+const splitRoundedInstallments = (total: number, count: number) => {
+  if (count <= 0) return [];
+  const candidate = Math.round(total / count / 1000) * 1000;
+  const regular =
+    count > 1 && candidate * (count - 1) > total
+      ? Math.floor(total / count / 1000) * 1000
+      : candidate;
+  return Array.from({ length: count }, (_, index) =>
+    index === count - 1 ? total - regular * (count - 1) : regular,
+  );
+};
 const validateDepositSchedule = (
   deposit: number,
   total: number,
@@ -180,9 +191,18 @@ const installmentsForCompanyReport = (contract: Contract) => {
     amount,
     kind: "installment" as const,
   }));
+  const depositTotal = contract.installments
+    .filter((i) => i.kind === "deposit")
+    .reduce((sum, item) => sum + item.amount, 0);
+  const adjustedAmounts = depositTotal
+    ? splitRoundedInstallments(
+        Math.max(0, rebuilt.reduce((sum, item) => sum + item.amount, 0) - depositTotal),
+        rebuilt.length,
+      )
+    : rebuilt.map((item) => item.amount);
   return [
     ...contract.installments.filter((i) => i.kind === "deposit"),
-    ...rebuilt,
+    ...rebuilt.map((item, index) => ({ ...item, amount: adjustedAmounts[index] })),
   ];
 };
 
@@ -218,18 +238,11 @@ const accountRowsForCompany = (companyContracts: Contract[]) => {
   const depositTotal = agreementDeposits.reduce((sum, row) => sum + row.amount, 0);
   const installmentTotal = monthlyRows.reduce((sum, row) => sum + row.amount, 0);
   const remainingForInstallments = Math.max(0, installmentTotal - depositTotal);
-  const roundedCandidate =
-    Math.round(remainingForInstallments / months.length / 1000) * 1000;
-  const roundedRegularInstallment =
-    months.length > 1 && roundedCandidate * (months.length - 1) > remainingForInstallments
-      ? Math.floor(remainingForInstallments / months.length / 1000) * 1000
-      : roundedCandidate;
+  const roundedAmounts = splitRoundedInstallments(remainingForInstallments, months.length);
   const monthTargets = new Map(
     months.map((month, index) => [
       month,
-      index === months.length - 1
-        ? remainingForInstallments - roundedRegularInstallment * (months.length - 1)
-        : roundedRegularInstallment,
+      roundedAmounts[index],
     ]),
   );
 
@@ -1859,7 +1872,7 @@ function AgreementCard({
   onDelete: () => void;
 }) {
   const [editing, setEditing] = useState<
-    "period" | "firstDue" | "installmentCount" | "quantity" | null
+    "period" | "firstDue" | "installmentCount" | "contractDeposit" | "quantity" | null
   >(null);
   const total = c.installments.reduce((s, i) => s + i.amount, 0);
   const companyPaymentStore: Record<string, Payment[]> =
@@ -1899,6 +1912,9 @@ function AgreementCard({
               </button>
               <button className="text-btn" onClick={() => setEditing("installmentCount")}>
                 تعديل عدد الأقساط
+              </button>
+              <button className="text-btn" onClick={() => setEditing("contractDeposit")}>
+                دفعة تعاقد للإعلان
               </button>
               <button className="text-btn" onClick={() => setEditing("quantity")}>
                 تعديل العدد والسعر
@@ -2008,6 +2024,19 @@ function AgreementCard({
       {editing === "installmentCount" && (
         <Modal title="تعديل عدد أقساط الإعلان" close={() => setEditing(null)}>
           <InstallmentCountEditForm
+            contract={c}
+            onSave={(updated) => {
+              window.dispatchEvent(
+                new CustomEvent("agreement-updated", { detail: updated }),
+              );
+              setEditing(null);
+            }}
+          />
+        </Modal>
+      )}
+      {editing === "contractDeposit" && (
+        <Modal title={`دفعة تعاقد — ${c.title}`} close={() => setEditing(null)}>
+          <ContractDepositEditForm
             contract={c}
             onSave={(updated) => {
               window.dispatchEvent(
@@ -2637,6 +2666,81 @@ function InstallmentCountEditForm({
         توزيع سداد الشركة على جميع الاستحقاقات حسب ترتيب تواريخها.
       </p>
       <button className="primary submit">إعادة توزيع الأقساط وحفظ التعديل</button>
+    </form>
+  );
+}
+
+function ContractDepositEditForm({
+  contract,
+  onSave,
+}: {
+  contract: Contract;
+  onSave: (c: Contract) => void;
+}) {
+  const normal = contract.installments
+    .filter((item) => item.kind === "installment")
+    .sort((a, b) => a.due.localeCompare(b.due));
+  const deposits = contract.installments.filter((item) => item.kind === "deposit");
+  const agreementTotal = contract.installments.reduce((sum, item) => sum + item.amount, 0);
+  const existingDepositTotal = deposits.reduce((sum, item) => sum + item.amount, 0);
+  const firstDue = normal[0]?.due || today();
+
+  function save(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    const fd = new FormData(e.currentTarget);
+    const amount = Number(fd.get("amount"));
+    const due = String(fd.get("date"));
+    if (amount <= 0 || !due || !normal.length) return;
+    if (due > firstDue) {
+      alert("موعد دفعة التعاقد يجب أن يسبق أول قسط للإعلان أو يوافقه.");
+      return;
+    }
+    if (existingDepositTotal + amount > agreementTotal) {
+      alert(`إجمالي دفعات التعاقد لا يمكن أن يتجاوز قيمة الإعلان (${money(agreementTotal)}).`);
+      return;
+    }
+    const remaining = agreementTotal - existingDepositTotal - amount;
+    const amounts = splitRoundedInstallments(remaining, normal.length);
+    const adjusted = normal.map((item, index) => ({
+      ...item,
+      label: `القسط ${index + 1}`,
+      amount: amounts[index],
+    }));
+    onSave({
+      ...contract,
+      installments: [
+        ...deposits,
+        {
+          id: uid(),
+          label: "دفعة تعاقد للإعلان",
+          due,
+          amount,
+          kind: "deposit",
+        },
+        ...adjusted,
+      ],
+    });
+  }
+
+  return (
+    <form className="form" onSubmit={save}>
+      <div className="balance-box">
+        تُسجل كاستحقاق غير مسدد لهذا الإعلان، وتُخصم من قيمته قبل إعادة توزيع المتبقي على أقساطه الحالية.
+      </div>
+      <div className="form-grid">
+        <label>
+          قيمة دفعة التعاقد
+          <input name="amount" type="number" min="1" step="0.01" required />
+        </label>
+        <label>
+          تاريخ الاستحقاق
+          <input name="date" type="date" max={firstDue} defaultValue={firstDue} required />
+        </label>
+      </div>
+      <p className="form-hint">
+        قيمة الإعلان {money(agreementTotal)} · أول قسط {firstDue} · عدد الأقساط {normal.length}
+      </p>
+      <button className="primary submit">تسجيل الدفعة وإعادة حساب أقساط الإعلان</button>
     </form>
   );
 }
