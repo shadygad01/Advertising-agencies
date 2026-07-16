@@ -282,16 +282,6 @@ export default function Home() {
       );
   }, [companyPayments, ready]);
   useEffect(() => {
-    if (!ready) return;
-    setCompanyPayments((current) =>
-      Object.fromEntries(
-        Object.entries(current).filter(([company]) =>
-          contracts.some((c) => c.company === company),
-        ),
-      ),
-    );
-  }, [contracts, ready]);
-  useEffect(() => {
     const update = (event: Event) => {
       const changed = (event as CustomEvent<Contract>).detail;
       setContracts((v) => v.map((c) => (c.id === changed.id ? changed : c)));
@@ -342,10 +332,10 @@ export default function Home() {
   );
   const companies = useMemo(
     () =>
-      [...new Set(contracts.map((c) => c.company))].sort((a, b) =>
+      [...new Set([...contracts.map((c) => c.company), ...Object.keys(companyPayments)])].sort((a, b) =>
         a.localeCompare(b, "ar"),
       ),
-    [contracts],
+    [contracts, companyPayments],
   );
   const companyDueRows = useMemo(
     () => {
@@ -507,25 +497,6 @@ export default function Home() {
     });
     setEditingPayment(null);
     setModal(null);
-  }
-  function resetCompanyPayments(company: string) {
-    const amount = (companyPayments[company] || []).reduce(
-      (sum, payment) => sum + payment.amount,
-      0,
-    );
-    if (!amount) return;
-    if (
-      !confirm(
-        `إعادة ضبط إجمالي المدفوع لشركة ${company} وحذف الرصيد المسجل ${money(amount)}؟ سيتم تحديث جميع التقارير والأقساط.`,
-      )
-    )
-      return;
-    setCompanyPayments((current) => {
-      const next = { ...current };
-      delete next[company];
-      localStorage.setItem("ad-company-payments-v1", JSON.stringify(next));
-      return next;
-    });
   }
   function backup() {
     const blob = new Blob(
@@ -839,16 +810,7 @@ export default function Home() {
                       contract={c}
                       onDelete={() => {
                         if (!confirm("حذف هذا الاتفاق؟")) return;
-                        const isLast =
-                          contracts.filter((x) => x.company === c.company)
-                            .length === 1;
                         setContracts((v) => v.filter((x) => x.id !== c.id));
-                        if (isLast)
-                          setCompanyPayments((v) => {
-                            const next = { ...v };
-                            delete next[c.company];
-                            return next;
-                          });
                       }}
                     />
                   ))}
@@ -871,7 +833,6 @@ export default function Home() {
             <DueTable rows={allRows} />
             <PaymentHistory
               payments={companyPayments}
-              onDelete={deletePayment}
             />
           </section>
         )}
@@ -924,7 +885,6 @@ export default function Home() {
               companies={reportCompany ? [reportCompany] : companies}
               contracts={contracts}
               payments={companyPayments}
-              onResetPayments={resetCompanyPayments}
             />
             <CompanyInstallmentDistribution
               companies={reportCompany ? [reportCompany] : companies}
@@ -1357,10 +1317,8 @@ function DueTable({
 
 function PaymentHistory({
   payments,
-  onDelete,
 }: {
   payments: Record<string, Payment[]>;
-  onDelete: (company: string, payment: Payment) => void;
 }) {
   const rows = Object.entries(payments)
     .flatMap(([company, items]) =>
@@ -1372,7 +1330,7 @@ function PaymentHistory({
     <div className="payment-history">
       <div className="subhead">
         <b>دفعات السداد المسجلة</b>
-        <small>حذف أي دفعة يعيد حساب التقارير والأقساط تلقائيًا</small>
+        <small>للتعديل أو الحذف استخدم تبويب المصروفات المسددة</small>
       </div>
       <div className="table-wrap">
         <table>
@@ -1382,7 +1340,6 @@ function PaymentHistory({
               <th>تاريخ السداد</th>
               <th>المبلغ</th>
               <th>البيان</th>
-              <th></th>
             </tr>
           </thead>
           <tbody>
@@ -1393,20 +1350,11 @@ function PaymentHistory({
                   <td>{payment.date}</td>
                   <td>{money(payment.amount)}</td>
                   <td>{payment.note || "—"}</td>
-                  <td>
-                    <button
-                      type="button"
-                      className="danger-link"
-                      onClick={() => onDelete(payment.company, payment)}
-                    >
-                      حذف الدفعة
-                    </button>
-                  </td>
                 </tr>
               ))
             ) : (
               <tr>
-                <td colSpan={5}>لا توجد دفعات سداد مسجلة.</td>
+                <td colSpan={4}>لا توجد دفعات سداد مسجلة.</td>
               </tr>
             )}
           </tbody>
@@ -2512,12 +2460,10 @@ function CompanySummaryReport({
   companies,
   contracts,
   payments,
-  onResetPayments,
 }: {
   companies: string[];
   contracts: Contract[];
   payments: Record<string, Payment[]>;
-  onResetPayments: (company: string) => void;
 }) {
   const rows = companies.map((company) => {
     const list = contracts.filter((c) => c.company === company);
@@ -2562,15 +2508,6 @@ function CompanySummaryReport({
               <td>{money(r.total)}</td>
               <td>
                 {money(r.paid)}
-                {r.paid > 0 && (
-                  <button
-                    type="button"
-                    className="danger-link print-hide"
-                    onClick={() => onResetPayments(r.company)}
-                  >
-                    إعادة ضبط المدفوع
-                  </button>
-                )}
               </td>
               <td>{money(r.remaining)}</td>
             </tr>
