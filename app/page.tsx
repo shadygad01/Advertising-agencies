@@ -885,6 +885,12 @@ export default function Home() {
               payments={companyPayments}
               onResetPayments={resetCompanyPayments}
             />
+            <PaymentsReport
+              companies={reportCompany ? [reportCompany] : companies}
+              payments={companyPayments}
+              year={year}
+              selectedCompany={reportCompany}
+            />
             <CompanyInstallmentDistribution
               companies={reportCompany ? [reportCompany] : companies}
               contracts={contracts}
@@ -2441,6 +2447,112 @@ function CompanySummaryReport({
             <td>{money(rows.reduce((s, r) => s + r.paid, 0))}</td>
             <td>{money(rows.reduce((s, r) => s + r.remaining, 0))}</td>
           </tr>
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function PaymentsReport({
+  companies,
+  payments,
+  year,
+  selectedCompany,
+}: {
+  companies: string[];
+  payments: Record<string, Payment[]>;
+  year: number;
+  selectedCompany: string;
+}) {
+  const rows = companies
+    .flatMap((company) =>
+      (payments[company] || [])
+        .filter((payment) => Number(payment.date.slice(0, 4)) === year)
+        .map((payment) => ({ ...payment, company })),
+    )
+    .sort((a, b) => a.date.localeCompare(b.date));
+  const companyTotals = companies
+    .map((company) => ({
+      company,
+      count: rows.filter((row) => row.company === company).length,
+      total: rows
+        .filter((row) => row.company === company)
+        .reduce((sum, row) => sum + row.amount, 0),
+    }))
+    .filter((item) => item.count > 0);
+  const grandTotal = rows.reduce((sum, row) => sum + row.amount, 0);
+
+  return (
+    <div className="panel report-table print-keep">
+      <div className="panel-head">
+        <div>
+          <h2>
+            {selectedCompany
+              ? `دفعات السداد المصروفة لشركة ${selectedCompany}`
+              : "دفعات السداد المصروفة لكل شركات الإعلانات"}
+          </h2>
+          <p>
+            دفعات عامة على حساب شركة الإعلانات وغير مخصصة لحملة إعلانية معينة خلال سنة {year}
+          </p>
+        </div>
+      </div>
+      {!selectedCompany && companyTotals.length > 0 && (
+        <table>
+          <thead>
+            <tr>
+              <th>شركة الإعلانات</th>
+              <th>عدد دفعات السداد</th>
+              <th>إجمالي المصروف</th>
+            </tr>
+          </thead>
+          <tbody>
+            {companyTotals.map((item) => (
+              <tr key={`payment-total-${item.company}`}>
+                <td><b>{item.company}</b></td>
+                <td>{item.count}</td>
+                <td>{money(item.total)}</td>
+              </tr>
+            ))}
+            <tr className="total-row">
+              <td>الإجمالي العام</td>
+              <td>{rows.length}</td>
+              <td>{money(grandTotal)}</td>
+            </tr>
+          </tbody>
+        </table>
+      )}
+      <table>
+        <thead>
+          <tr>
+            {!selectedCompany && <th>شركة الإعلانات</th>}
+            <th>تاريخ السداد</th>
+            <th>البيان / الملاحظة</th>
+            <th>المبلغ المصروف</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.length ? (
+            rows.map((row) => (
+              <tr key={`payment-report-${row.company}-${row.id}`}>
+                {!selectedCompany && <td><b>{row.company}</b></td>}
+                <td>{row.date}</td>
+                <td>{row.note || "دفعة سداد"}</td>
+                <td>{money(row.amount)}</td>
+              </tr>
+            ))
+          ) : (
+            <tr>
+              <td colSpan={selectedCompany ? 3 : 4}>لا توجد دفعات سداد مصروفة خلال هذه السنة.</td>
+            </tr>
+          )}
+          {rows.length > 0 && (
+            <tr className="total-row">
+              <td colSpan={selectedCompany ? 2 : 3}>
+                {selectedCompany ? "إجمالي دفعات الشركة" : "إجمالي دفعات كل الشركات"}
+              </td>
+              <td>{money(grandTotal)}</td>
+            </tr>
+          )}
         </tbody>
       </table>
     </div>
