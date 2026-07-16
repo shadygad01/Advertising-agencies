@@ -186,6 +186,51 @@ const installmentsForCompanyReport = (contract: Contract) => {
   ];
 };
 
+type CompanyScheduleRow = Installment & {
+  company: string;
+  contractId: string;
+  title: string;
+  agreementType?: Contract["agreementType"];
+};
+
+const accountRowsForCompany = (companyContracts: Contract[]) => {
+  const raw: CompanyScheduleRow[] = companyContracts.flatMap((contract) =>
+    installmentsForCompanyReport(contract).map((installment) => ({
+      ...installment,
+      company: contract.company,
+      contractId: contract.id,
+      title: contract.title,
+      agreementType: contract.agreementType,
+    })),
+  );
+  const agreementDeposits = raw.filter(
+    (row) => row.agreementType === "companyDeposit",
+  );
+  if (!agreementDeposits.length) return raw;
+
+  const monthlyRows = raw.filter(
+    (row) =>
+      row.kind === "installment" &&
+      (!row.agreementType || row.agreementType === "campaign"),
+  );
+  const months = [...new Set(monthlyRows.map((row) => row.due.slice(0, 7)))].sort();
+  if (!months.length) return raw;
+  const depositTotal = agreementDeposits.reduce((sum, row) => sum + row.amount, 0);
+  const installmentTotal = monthlyRows.reduce((sum, row) => sum + row.amount, 0);
+  const monthlyTarget = Math.max(0, installmentTotal - depositTotal) / months.length;
+
+  return raw.map((row) => {
+    if (!monthlyRows.some((item) => item.id === row.id)) return row;
+    const month = row.due.slice(0, 7);
+    const monthRows = monthlyRows.filter((item) => item.due.slice(0, 7) === month);
+    const originalMonthTotal = monthRows.reduce((sum, item) => sum + item.amount, 0);
+    return {
+      ...row,
+      amount: originalMonthTotal ? (row.amount / originalMonthTotal) * monthlyTarget : 0,
+    };
+  });
+};
+
 const seed: Contract[] = [
   {
     id: "demo",
@@ -331,16 +376,7 @@ export default function Home() {
           (s, p) => s + p.amount,
           0,
         );
-        return contracts
-          .filter((c) => c.company === company)
-          .flatMap((c) =>
-            installmentsForCompanyReport(c).map((i) => ({
-              ...i,
-              company,
-              contractId: c.id,
-              title: c.title,
-            })),
-          )
+        return accountRowsForCompany(contracts.filter((c) => c.company === company))
           .sort((a, b) => a.due.localeCompare(b.due))
           .map((i) => {
             const applied = Math.min(paid, i.amount);
@@ -441,10 +477,7 @@ export default function Home() {
     [reportRows, year],
   );
   const timelineData = useMemo(() => fiscalMonths(year).map(({ name, month, year: itemYear }) => { const rows = allRows.filter(r => Number(r.due.slice(0, 4)) === itemYear && Number(r.due.slice(5, 7)) === month + 1); return { name, month, year: itemYear, due: rows.reduce((s, r) => s + r.amount, 0), paid: rows.reduce((s, r) => s + r.applied, 0), remaining: rows.reduce((s, r) => s + r.remaining, 0) }; }), [allRows, year]);
-  const totalContracted = contracts.reduce(
-    (s, c) => s + c.installments.reduce((x, i) => x + i.amount, 0),
-    0,
-  );
+  const totalContracted = allRows.reduce((sum, row) => sum + row.amount, 0);
   const totalPaid = Object.values(companyPayments)
     .flat()
     .reduce((s, p) => s + p.amount, 0);
@@ -477,19 +510,48 @@ export default function Home() {
     e.preventDefault();
     const fd = new FormData(e.currentTarget);
     const amount = Number(fd.get("amount"));
-    if (!selectedCompany || amount <= 0) return;
-    setCompanyPayments((current) => ({
+    const due = String(fd.get("date"));
+    if (!selectedCompany || amount <= 0 || !due) return;
+    const companyContracts = contracts.filter((c) => c.company === selectedCompany);
+    const monthlyInstallments = companyContracts
+      .filter((c) => !c.agreementType || c.agreementType === "campaign")
+      .flatMap((c) => installmentsForCompanyReport(c))
+      .filter((i) => i.kind === "installment");
+    const existingDeposits = companyContracts
+      .filter((c) => c.agreementType === "companyDeposit")
+      .flatMap((c) => c.installments)
+      .reduce((sum, item) => sum + item.amount, 0);
+    const available = monthlyInstallments.reduce((sum, item) => sum + item.amount, 0) - existingDeposits;
+    const firstInstallmentDue = [...monthlyInstallments]
+      .sort((a, b) => a.due.localeCompare(b.due))[0]?.due;
+    if (amount > available) {
+      alert(`دفعة الاتفاق لا يمكن أن تتجاوز المتبقي المتاح للأقساط (${money(Math.max(0, available))}).`);
+      return;
+    }
+    if (firstInstallmentDue && due > firstInstallmentDue) {
+      alert("موعد دفعة الاتفاق يجب أن يسبق أول قسط شهري أو يوافقه.");
+      return;
+    }
+    setContracts((current) => [
       ...current,
-      [selectedCompany]: [
-        ...(current[selectedCompany] || []),
-        {
+      {
+        id: uid(),
+        company: selectedCompany,
+        title: "دفعة اتفاق على المشاع",
+        start: today(),
+        notes: String(fd.get("note") || "دفعة اتفاق على المشاع"),
+        agreementType: "companyDeposit",
+        signs: [],
+        installments: [{
           id: uid(),
-          date: String(fd.get("date")),
+          label: "دفعة اتفاق",
+          due,
           amount,
-          note: String(fd.get("note") || "دفعة تعاقد على المشاع"),
-        },
-      ],
-    }));
+          kind: "deposit",
+        }],
+        payments: [],
+      },
+    ]);
     setModal(null);
   }
   function deletePayment(company: string, target: Payment) {
@@ -789,9 +851,8 @@ export default function Home() {
               <div className="companies-grid">
                 {companies.map((company) => {
                   const list = contracts.filter((c) => c.company === company);
-                  const total = list.reduce(
-                    (s, c) =>
-                      s + c.installments.reduce((x, i) => x + i.amount, 0),
+                  const total = accountRowsForCompany(list).reduce(
+                    (sum, row) => sum + row.amount,
                     0,
                   );
                   const paid = (companyPayments[company] || []).reduce(
@@ -1200,7 +1261,7 @@ export default function Home() {
         >
           <form className="form" onSubmit={saveCompanyContractDeposit}>
             <div className="balance-box">
-              هذه دفعة سداد عامة تخصم من حساب الشركة، ثم يوزعها النظام على أقدم الاستحقاقات دون ربطها بإعلان معين.
+              قيد استحقاق غير مسدد يُخصم من إجمالي المتبقي، ثم يوزع النظام الباقي بالتساوي على أشهر الأقساط المسجلة. في شهر استحقاقها تُضاف دفعة الاتفاق إلى قسط الشهر.
             </div>
             <div className="form-grid">
               <label>
@@ -1208,7 +1269,7 @@ export default function Home() {
                 <input name="amount" type="number" min="1" step="0.01" required />
               </label>
               <label>
-                تاريخ السداد
+                تاريخ الاستحقاق
                 <input name="date" type="date" defaultValue={today()} required />
               </label>
               <label className="wide">
@@ -1216,7 +1277,7 @@ export default function Home() {
                 <input name="note" defaultValue="دفعة تعاقد على المشاع" />
               </label>
             </div>
-            <button className="primary submit">تسجيل الدفعة وخصمها من حساب الشركة</button>
+            <button className="primary submit">تسجيل الاستحقاق وإعادة حساب الأقساط</button>
           </form>
         </Modal>
       )}
@@ -1282,14 +1343,9 @@ export default function Home() {
                   {money(
                     Math.max(
                       0,
-                      contracts
-                        .filter((c) => c.company === selected)
-                        .reduce(
-                          (s, c) =>
-                            s +
-                            c.installments.reduce((x, i) => x + i.amount, 0),
-                          0,
-                        ) -
+                      allRows
+                        .filter((row) => row.company === selected)
+                        .reduce((sum, row) => sum + row.amount, 0) -
                         (companyPayments[selected] || []).reduce(
                           (s, p) => s + p.amount,
                           0,
@@ -2657,8 +2713,8 @@ function CompanySummaryReport({
 }) {
   const rows = companies.map((company) => {
     const list = contracts.filter((c) => c.company === company);
-    const total = list.reduce(
-      (s, c) => s + c.installments.reduce((x, i) => x + i.amount, 0),
+    const total = accountRowsForCompany(list).reduce(
+      (sum, row) => sum + row.amount,
       0,
     );
     const paid = (payments[company] || []).reduce((s, p) => s + p.amount, 0);
