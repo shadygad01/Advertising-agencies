@@ -30,6 +30,7 @@ type Contract = {
   installments: Installment[];
   payments: Payment[];
   notes: string;
+  agreementType?: "campaign" | "printing";
 };
 
 const KEY = "ad-expense-planner-v2";
@@ -230,7 +231,9 @@ export default function Home() {
     "dashboard" | "contracts" | "payments" | "reports"
   >("dashboard");
   const [year, setYear] = useState(new Date().getFullYear());
-  const [modal, setModal] = useState<"contract" | "payment" | null>(null);
+  const [modal, setModal] = useState<
+    "newCompanyContract" | "agreement" | "payment" | null
+  >(null);
   const [selected, setSelected] = useState<string>("");
   const [selectedCompany, setSelectedCompany] = useState<string>("");
   const [reportCompany, setReportCompany] = useState<string>("");
@@ -548,7 +551,7 @@ export default function Home() {
             <button className="secondary" onClick={() => setModal("payment")}>
               تسجيل دفعة
             </button>
-            <button className="primary" onClick={() => setModal("contract")}>
+            <button className="primary" onClick={() => setModal("newCompanyContract")}>
               ＋ عقد جديد
             </button>
           </div>
@@ -674,8 +677,13 @@ export default function Home() {
                     : `${companies.length} شركة نتعامل معها`}
                 </p>
               </div>
-              <button className="primary" onClick={() => setModal("contract")}>
-                ＋ {selectedCompany ? "اتفاق جديد" : "إضافة اتفاق"}
+              <button
+                className="primary"
+                onClick={() =>
+                  setModal(selectedCompany ? "agreement" : "newCompanyContract")
+                }
+              >
+                ＋ {selectedCompany ? "اتفاق جديد" : "عقد جديد"}
               </button>
             </div>
             {!selectedCompany ? (
@@ -1019,17 +1027,17 @@ export default function Home() {
         )}
       </main>
 
-      {modal === "contract" && (
+      {(modal === "newCompanyContract" || modal === "agreement") && (
         <Modal
           title={
-            selectedCompany
+            modal === "agreement" && selectedCompany
               ? `اتفاق جديد — ${selectedCompany}`
-              : "إضافة اتفاق جديد"
+              : "عقد جديد مع شركة جديدة"
           }
           close={() => setModal(null)}
         >
           <AgreementForm
-            defaultCompany={selectedCompany}
+            defaultCompany={modal === "agreement" ? selectedCompany : ""}
             onSave={(c) => {
               setContracts((v) => [...v, c]);
               setSelectedCompany(c.company);
@@ -1519,6 +1527,7 @@ function AgreementCard({
     0,
   );
   const sign = c.signs[0];
+  const isPrinting = c.agreementType === "printing";
   return (
     <article className="contract-card">
       <div className="contract-top">
@@ -1527,27 +1536,43 @@ function AgreementCard({
           <div>
             <h3>{c.title}</h3>
             <p>
-              {sign?.location} · الاتفاق {c.start} · العرض{" "}
-              {c.displayStart || sign?.start}
+              {isPrinting
+                ? `التزام طباعة أُنشئ بتاريخ ${c.start}`
+                : `${sign?.location} · الاتفاق ${c.start} · العرض ${c.displayStart || sign?.start}`}
             </p>
           </div>
         </div>
         <div className="card-actions">
-          <button className="text-btn" onClick={() => setEditing("period")}>
-            تعديل فترة العرض
-          </button>
-          <button className="text-btn" onClick={() => setEditing("firstDue")}>
-            تعديل أول قسط
-          </button>
-          <button className="text-btn" onClick={() => setEditing("quantity")}>
-            تعديل العدد والسعر
-          </button>
+          {!isPrinting && (
+            <>
+              <button className="text-btn" onClick={() => setEditing("period")}>
+                تعديل فترة العرض
+              </button>
+              <button className="text-btn" onClick={() => setEditing("firstDue")}>
+                تعديل أول قسط
+              </button>
+              <button className="text-btn" onClick={() => setEditing("quantity")}>
+                تعديل العدد والسعر
+              </button>
+            </>
+          )}
           <button className="danger-link" onClick={onDelete}>
             حذف الاتفاق
           </button>
         </div>
       </div>
-      <div className="agreement-formula">
+      {isPrinting ? (
+        <div className="agreement-formula">
+          <span className="formula-total">
+            <small>قيمة التزام عقد الطباعة</small>
+            <b>{money(total)}</b>
+          </span>
+          <span>
+            <small>شهر الاستحقاق</small>
+            <b>{c.start.slice(0, 7)}</b>
+          </span>
+        </div>
+      ) : <div className="agreement-formula">
         <span>
           <small>عدد اليافطات</small>
           <b>{c.quantity || c.signs.length}</b>
@@ -1567,8 +1592,8 @@ function AgreementCard({
           <small>إجمالي الاتفاق</small>
           <b>{money(total)}</b>
         </span>
-      </div>
-      <div className="contract-grid">
+      </div>}
+      {!isPrinting && <div className="contract-grid">
         <div>
           <small>فترة العرض</small>
           <b>
@@ -1587,7 +1612,7 @@ function AgreementCard({
           <small>عدد الدفعات</small>
           <b>{c.installments.length}</b>
         </div>
-      </div>
+      </div>}
       {c.notes && <p className="note">{c.notes}</p>}
       {editing === "period" && (
         <Modal title="تعديل فترة العرض" close={() => setEditing(null)}>
@@ -1655,6 +1680,7 @@ function AgreementForm({
   const [displayEnd, setDisplayEnd] = useState("");
   const [mode, setMode] = useState<"auto" | "manual">("auto");
   const [manual, setManual] = useState<Installment[]>([blankInst()]);
+  const [agreementType, setAgreementType] = useState<"campaign" | "printing">("campaign");
   const billingMonths = (start: string, end: string) => {
     if (!start || !end || end < start) return 0;
     const a = new Date(start + "T12:00:00");
@@ -1679,6 +1705,29 @@ function AgreementForm({
   function submit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     const fd = new FormData(e.currentTarget);
+    if (agreementType === "printing") {
+      const amount = Number(fd.get("printingAmount") || 0);
+      if (amount <= 0) return;
+      const created = today();
+      onSave({
+        id: uid(),
+        company: defaultCompany,
+        title: "عقد طباعة",
+        start: created,
+        notes: String(fd.get("printingNotes") || ""),
+        agreementType: "printing",
+        signs: [],
+        installments: [{
+          id: uid(),
+          label: "عقد طباعة",
+          due: created,
+          amount,
+          kind: "installment",
+        }],
+        payments: [],
+      });
+      return;
+    }
     const agreementDate = String(fd.get("agreementDate"));
     const deposit = Number(fd.get("deposit") || 0);
     const depositDate = String(fd.get("depositDate") || agreementDate);
@@ -1732,6 +1781,7 @@ function AgreementForm({
       monthlyUnitPrice: unitPrice,
       durationMonths: months,
       notes: String(fd.get("notes") || ""),
+      agreementType: "campaign",
       signs: [
         {
           id: uid(),
@@ -1747,6 +1797,34 @@ function AgreementForm({
   }
   return (
     <form onSubmit={submit} className="form">
+      {defaultCompany && (
+        <div className="tabs">
+          <button type="button" className={agreementType === "campaign" ? "active" : ""} onClick={() => setAgreementType("campaign")}>
+            اتفاق حملة إعلانية
+          </button>
+          <button type="button" className={agreementType === "printing" ? "active" : ""} onClick={() => setAgreementType("printing")}>
+            عقد طباعة
+          </button>
+        </div>
+      )}
+      {agreementType === "printing" ? (
+        <>
+          <div className="balance-box">
+            يُسجل المبلغ كالتزام عام على شركة آثار تجاه {defaultCompany}، ويُضاف إلى إجمالي حساب الشركة في شهر إنشائه دون ربطه بحملة معينة.
+          </div>
+          <div className="form-grid">
+            <label>
+              المبلغ
+              <input name="printingAmount" type="number" min="1" required />
+            </label>
+            <label className="wide">
+              ملاحظات
+              <input name="printingNotes" />
+            </label>
+          </div>
+          <button className="primary submit">حفظ عقد الطباعة وإضافة الالتزام</button>
+        </>
+      ) : <>
       <div className="form-grid">
         <label>
           شركة الإعلان
@@ -1954,6 +2032,7 @@ function AgreementForm({
         </>
       )}
       <button className="primary submit">حفظ الاتفاق وإنشاء جدول السداد</button>
+      </>}
     </form>
   );
 }
@@ -2201,7 +2280,7 @@ function CompanySummaryReport({
     const paid = (payments[company] || []).reduce((s, p) => s + p.amount, 0);
     return {
       company,
-      campaigns: list.length,
+      campaigns: list.filter((c) => c.agreementType !== "printing").length,
       total,
       paid,
       remaining: Math.max(0, total - paid),
