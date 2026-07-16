@@ -2919,20 +2919,13 @@ function CompanyInstallmentDistribution({
 }) {
   const values = (company: string) =>
     fiscalMonths(year).map(({ month, year: itemYear }) =>
-      contracts
-        .filter((c) => c.company === company)
-        .reduce(
-          (sum, c) =>
-            sum +
-            installmentsForCompanyReport(c)
-              .filter(
-                (i) =>
-                  Number(i.due.slice(0, 4)) === itemYear &&
-                  Number(i.due.slice(5, 7)) === month + 1,
-              )
-              .reduce((s, i) => s + i.amount, 0),
-          0,
-        ),
+      accountRowsForCompany(contracts.filter((c) => c.company === company))
+        .filter(
+          (row) =>
+            Number(row.due.slice(0, 4)) === itemYear &&
+            Number(row.due.slice(5, 7)) === month + 1,
+        )
+        .reduce((sum, row) => sum + row.amount, 0),
     );
   const rows = companies.map((company) => ({ company, vals: values(company) }));
   return (
