@@ -455,6 +455,19 @@ export default function Home() {
     }));
     setModal(null);
   }
+  function deletePayment(company: string, paymentId: string) {
+    if (!confirm("حذف دفعة السداد؟ سيتم إلغاء أثرها من جميع التقارير وجدول الأقساط."))
+      return;
+    setCompanyPayments((current) => {
+      const remaining = (current[company] || []).filter(
+        (payment) => payment.id !== paymentId,
+      );
+      const next = { ...current };
+      if (remaining.length) next[company] = remaining;
+      else delete next[company];
+      return next;
+    });
+  }
   function backup() {
     const blob = new Blob(
       [
@@ -789,6 +802,10 @@ export default function Home() {
               </button>
             </div>
             <DueTable rows={allRows} />
+            <PaymentHistory
+              payments={companyPayments}
+              onDelete={deletePayment}
+            />
           </section>
         )}
 
@@ -1166,6 +1183,67 @@ function DueTable({
           )}
         </tbody>
       </table>
+    </div>
+  );
+}
+
+function PaymentHistory({
+  payments,
+  onDelete,
+}: {
+  payments: Record<string, Payment[]>;
+  onDelete: (company: string, paymentId: string) => void;
+}) {
+  const rows = Object.entries(payments)
+    .flatMap(([company, items]) =>
+      items.map((payment) => ({ ...payment, company })),
+    )
+    .sort((a, b) => b.date.localeCompare(a.date));
+
+  return (
+    <div className="payment-history">
+      <div className="subhead">
+        <b>دفعات السداد المسجلة</b>
+        <small>حذف أي دفعة يعيد حساب التقارير والأقساط تلقائيًا</small>
+      </div>
+      <div className="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>الشركة</th>
+              <th>تاريخ السداد</th>
+              <th>المبلغ</th>
+              <th>البيان</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.length ? (
+              rows.map((payment) => (
+                <tr key={`${payment.company}-${payment.id}`}>
+                  <td><b>{payment.company}</b></td>
+                  <td>{payment.date}</td>
+                  <td>{money(payment.amount)}</td>
+                  <td>{payment.note || "—"}</td>
+                  <td>
+                    <button
+                      type="button"
+                      className="danger-link"
+                      onClick={() => onDelete(payment.company, payment.id)}
+                    >
+                      حذف الدفعة
+                    </button>
+                  </td>
+                </tr>
+              ))
+            ) : (
+              <tr>
+                <td colSpan={5}>لا توجد دفعات سداد مسجلة.</td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }
