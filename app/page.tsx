@@ -455,16 +455,23 @@ export default function Home() {
     }));
     setModal(null);
   }
-  function deletePayment(company: string, paymentId: string) {
+  function deletePayment(company: string, target: Payment) {
     if (!confirm("حذف دفعة السداد؟ سيتم إلغاء أثرها من جميع التقارير وجدول الأقساط."))
       return;
     setCompanyPayments((current) => {
       const remaining = (current[company] || []).filter(
-        (payment) => payment.id !== paymentId,
+        (payment) =>
+          payment.id !== target.id &&
+          !(
+            payment.amount === target.amount &&
+            payment.date === target.date &&
+            (payment.note || "") === (target.note || "")
+          ),
       );
       const next = { ...current };
       if (remaining.length) next[company] = remaining;
       else delete next[company];
+      localStorage.setItem("ad-company-payments-v1", JSON.stringify(next));
       return next;
     });
   }
@@ -1192,7 +1199,7 @@ function PaymentHistory({
   onDelete,
 }: {
   payments: Record<string, Payment[]>;
-  onDelete: (company: string, paymentId: string) => void;
+  onDelete: (company: string, payment: Payment) => void;
 }) {
   const rows = Object.entries(payments)
     .flatMap(([company, items]) =>
@@ -1229,7 +1236,7 @@ function PaymentHistory({
                     <button
                       type="button"
                       className="danger-link"
-                      onClick={() => onDelete(payment.company, payment.id)}
+                      onClick={() => onDelete(payment.company, payment)}
                     >
                       حذف الدفعة
                     </button>
