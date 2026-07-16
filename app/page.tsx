@@ -48,6 +48,20 @@ const monthsAr = [
   "نوفمبر",
   "ديسمبر",
 ];
+const fiscalMonths = (startYear: number) =>
+  Array.from({ length: 12 }, (_, offset) => {
+    const date = new Date(startYear, 6 + offset, 1, 12);
+    return {
+      name: monthsAr[date.getMonth()],
+      month: date.getMonth(),
+      year: date.getFullYear(),
+      label: `${monthsAr[date.getMonth()]} ${date.getFullYear()}`,
+    };
+  });
+const currentFiscalYear = () => {
+  const now = new Date();
+  return now.getMonth() >= 6 ? now.getFullYear() : now.getFullYear() - 1;
+};
 const money = (n: number) =>
   new Intl.NumberFormat("ar-EG", { maximumFractionDigits: 0 }).format(n) +
   " ج.م";
@@ -230,7 +244,7 @@ export default function Home() {
   const [view, setView] = useState<
     "dashboard" | "contracts" | "payments" | "reports" | "paidReports"
   >("dashboard");
-  const [year, setYear] = useState(new Date().getFullYear());
+  const [year, setYear] = useState(currentFiscalYear);
   const [modal, setModal] = useState<
     "newCompanyContract" | "agreement" | "payment" | "editPayment" | null
   >(null);
@@ -386,34 +400,19 @@ export default function Home() {
     () => allRows.filter((r) => !reportCompany || r.company === reportCompany),
     [allRows, reportCompany],
   );
-  const monthData = useMemo(
-    () =>
-      monthsAr.map((name, idx) => {
-        const rows = allRows.filter(
-          (r) =>
-            Number(r.due.slice(0, 4)) === year &&
-            Number(r.due.slice(5, 7)) === idx + 1,
-        );
-        return {
-          name,
-          rows,
-          due: rows.reduce((s, r) => s + r.amount, 0),
-          paid: rows.reduce((s, r) => s + r.applied, 0),
-          remaining: rows.reduce((s, r) => s + r.remaining, 0),
-        };
-      }),
-    [allRows, year],
-  );
   const reportMonthData = useMemo(
     () =>
-      monthsAr.map((name, idx) => {
+      fiscalMonths(year).map(({ name, label, month, year: itemYear }) => {
         const rows = reportRows.filter(
           (r) =>
-            Number(r.due.slice(0, 4)) === year &&
-            Number(r.due.slice(5, 7)) === idx + 1,
+            Number(r.due.slice(0, 4)) === itemYear &&
+            Number(r.due.slice(5, 7)) === month + 1,
         );
         return {
           name,
+          label,
+          month,
+          year: itemYear,
           due: rows.reduce((s, r) => s + r.amount, 0),
           paid: rows.reduce((s, r) => s + r.applied, 0),
           remaining: rows.reduce((s, r) => s + r.remaining, 0),
@@ -421,7 +420,7 @@ export default function Home() {
       }),
     [reportRows, year],
   );
-  const timelineData = useMemo(() => Array.from({ length: 12 }, (_, offset) => { const date = new Date(year, 6 + offset, 1); const month = date.getMonth(); const itemYear = date.getFullYear(); const rows = allRows.filter(r => Number(r.due.slice(0, 4)) === itemYear && Number(r.due.slice(5, 7)) === month + 1); return { name: monthsAr[month], month, year: itemYear, due: rows.reduce((s, r) => s + r.amount, 0), paid: rows.reduce((s, r) => s + r.applied, 0), remaining: rows.reduce((s, r) => s + r.remaining, 0) }; }), [allRows, year]);
+  const timelineData = useMemo(() => fiscalMonths(year).map(({ name, month, year: itemYear }) => { const rows = allRows.filter(r => Number(r.due.slice(0, 4)) === itemYear && Number(r.due.slice(5, 7)) === month + 1); return { name, month, year: itemYear, due: rows.reduce((s, r) => s + r.amount, 0), paid: rows.reduce((s, r) => s + r.applied, 0), remaining: rows.reduce((s, r) => s + r.remaining, 0) }; }), [allRows, year]);
   const totalContracted = contracts.reduce(
     (s, c) => s + c.installments.reduce((x, i) => x + i.amount, 0),
     0,
@@ -878,7 +877,7 @@ export default function Home() {
                   : "تقرير مصروف الدعاية والإعلانات"}
               </h1>
               <p>
-                السنة المالية {year} · تاريخ التقرير {today()}
+                السنة المالية يوليو {year} — يونيو {year + 1} · تاريخ التقرير {today()}
               </p>
             </div>
             <CompanySummaryReport
@@ -905,16 +904,16 @@ export default function Home() {
                   <thead>
                     <tr>
                       <th>الاتفاق</th>
-                      {monthsAr.map((m) => (
-                        <th key={m}>{m}</th>
+                      {fiscalMonths(year).map((m) => (
+                        <th key={m.label}>{m.label}</th>
                       ))}
                       <th>الإجمالي</th>
                     </tr>
                   </thead>
                   <tbody>
                     {reportContracts.map((c) => {
-                      const vals = monthsAr.map((_, i) =>
-                        agreementValueForMonth(c, year, i),
+                      const vals = fiscalMonths(year).map((m) =>
+                        agreementValueForMonth(c, m.year, m.month),
                       );
                       return (
                         <tr key={`origin-${c.id}`}>
@@ -946,13 +945,13 @@ export default function Home() {
                     })}
                     <tr className="total-row">
                       <td>أصل المستحق لكل شهر</td>
-                      {monthsAr.map((_, i) => {
+                      {fiscalMonths(year).map((m) => {
                         const total = reportContracts.reduce(
-                          (s, c) => s + agreementValueForMonth(c, year, i),
+                          (s, c) => s + agreementValueForMonth(c, m.year, m.month),
                           0,
                         );
                         return (
-                          <td key={i}>
+                          <td key={m.label}>
                             {total
                               ? new Intl.NumberFormat("ar-EG", {
                                   maximumFractionDigits: 0,
@@ -968,9 +967,9 @@ export default function Home() {
                           reportContracts.reduce(
                             (sum, c) =>
                               sum +
-                              monthsAr.reduce(
-                                (s, _, i) =>
-                                  s + agreementValueForMonth(c, year, i),
+                              fiscalMonths(year).reduce(
+                                (s, m) =>
+                                  s + agreementValueForMonth(c, m.year, m.month),
                                 0,
                               ),
                             0,
@@ -993,8 +992,8 @@ export default function Home() {
                 <thead>
                   <tr>
                     <th>{reportCompany ? "الاتفاق" : "الشركة / الاتفاق"}</th>
-                    {monthsAr.map((m) => (
-                      <th key={m}>{m}</th>
+                    {fiscalMonths(year).map((m) => (
+                      <th key={m.label}>{m.label}</th>
                     ))}
                     <th>الإجمالي</th>
                   </tr>
@@ -1002,12 +1001,12 @@ export default function Home() {
                 <tbody>
                   {reportContracts.map((c) => {
                     const rows = allRows.filter((row) => row.contractId === c.id);
-                    const vals = monthsAr.map((_, i) =>
+                    const vals = fiscalMonths(year).map((m) =>
                       rows
                         .filter(
                           (r) =>
-                            Number(r.due.slice(0, 4)) === year &&
-                            Number(r.due.slice(5, 7)) === i + 1,
+                            Number(r.due.slice(0, 4)) === m.year &&
+                            Number(r.due.slice(5, 7)) === m.month + 1,
                         )
                         .reduce((s, r) => s + r.remaining, 0),
                     );
@@ -1037,7 +1036,7 @@ export default function Home() {
                   <tr className="total-row">
                     <td>إجمالي الشهر</td>
                     {reportMonthData.map((m) => (
-                      <td key={m.name}>
+                      <td key={m.label}>
                         {m.remaining
                           ? new Intl.NumberFormat("ar-EG").format(m.remaining)
                           : "—"}
@@ -1111,7 +1110,7 @@ export default function Home() {
                   ? `المصروفات المسددة لشركة ${reportCompany}`
                   : "المصروفات المسددة لكل شركات الإعلانات"}
               </h1>
-              <p>السنة المالية {year} · تاريخ التقرير {today()}</p>
+              <p>السنة المالية يوليو {year} — يونيو {year + 1} · تاريخ التقرير {today()}</p>
             </div>
             <PaymentsReport
               companies={reportCompany ? [reportCompany] : companies}
@@ -2543,7 +2542,12 @@ function PaymentsReport({
   const rows = companies
     .flatMap((company) =>
       (payments[company] || [])
-        .filter((payment) => Number(payment.date.slice(0, 4)) === year)
+        .filter((payment) => {
+          const date = new Date(`${payment.date}T12:00:00`);
+          const start = new Date(year, 6, 1, 12);
+          const end = new Date(year + 1, 5, 30, 12);
+          return date >= start && date <= end;
+        })
         .map((payment) => ({ ...payment, company })),
     )
     .sort((a, b) => a.date.localeCompare(b.date));
@@ -2568,7 +2572,7 @@ function PaymentsReport({
               : "دفعات السداد المصروفة لكل شركات الإعلانات"}
           </h2>
           <p>
-            دفعات عامة على حساب شركة الإعلانات وغير مخصصة لحملة إعلانية معينة خلال سنة {year}
+            دفعات عامة خلال السنة المالية من يوليو {year} حتى يونيو {year + 1}
           </p>
         </div>
       </div>
@@ -2651,7 +2655,7 @@ function CompanyInstallmentDistribution({
   year: number;
 }) {
   const values = (company: string) =>
-    monthsAr.map((_, month) =>
+    fiscalMonths(year).map(({ month, year: itemYear }) =>
       contracts
         .filter((c) => c.company === company)
         .reduce(
@@ -2660,7 +2664,7 @@ function CompanyInstallmentDistribution({
             installmentsForCompanyReport(c)
               .filter(
                 (i) =>
-                  Number(i.due.slice(0, 4)) === year &&
+                  Number(i.due.slice(0, 4)) === itemYear &&
                   Number(i.due.slice(5, 7)) === month + 1,
               )
               .reduce((s, i) => s + i.amount, 0),
@@ -2680,8 +2684,8 @@ function CompanyInstallmentDistribution({
         <thead>
           <tr>
             <th>شركة الإعلانات</th>
-            {monthsAr.map((m) => (
-              <th key={m}>{m}</th>
+            {fiscalMonths(year).map((m) => (
+              <th key={m.label}>{m.label}</th>
             ))}
             <th>إجمالي السنة</th>
           </tr>
@@ -2708,10 +2712,10 @@ function CompanyInstallmentDistribution({
           ))}
           <tr className="total-row">
             <td>إجمالي الشهر</td>
-            {monthsAr.map((_, i) => {
+            {fiscalMonths(year).map((m, i) => {
               const v = rows.reduce((s, r) => s + r.vals[i], 0);
               return (
-                <td key={i}>
+                <td key={m.label}>
                   {v
                     ? new Intl.NumberFormat("ar-EG", {
                         maximumFractionDigits: 0,
