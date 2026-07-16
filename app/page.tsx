@@ -1221,6 +1221,17 @@ function DueTable({
             </tr>
           )}
         </tbody>
+        {rows.length > 0 && (
+          <tfoot>
+            <tr className="total-row">
+              <td colSpan={3}>إجمالي الاستحقاقات الظاهرة</td>
+              <td>{money(rows.reduce((sum, row) => sum + row.amount, 0))}</td>
+              <td>{money(rows.reduce((sum, row) => sum + row.applied, 0))}</td>
+              <td>{money(rows.reduce((sum, row) => sum + row.remaining, 0))}</td>
+              <td>—</td>
+            </tr>
+          </tfoot>
+        )}
       </table>
     </div>
   );
