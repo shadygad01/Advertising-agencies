@@ -344,13 +344,17 @@ export default function Home() {
     [contracts],
   );
   const companyDueRows = useMemo(
-    () =>
-      companies
-        .map((company) => {
-          const rows = allRows.filter(
-            (r) => r.company === company && r.remaining > 0,
-          );
-          if (!rows.length) return null;
+    () => {
+      const groups = new Map<string, typeof allRows>();
+      allRows
+        .filter((row) => row.remaining > 0)
+        .forEach((row) => {
+          const key = `${row.company}::${row.due.slice(0, 7)}`;
+          groups.set(key, [...(groups.get(key) || []), row]);
+        });
+      return [...groups.entries()]
+        .map(([key, rows]) => {
+          const [company, monthKey] = key.split("::");
           const amount = rows.reduce((s, r) => s + r.amount, 0);
           const applied = rows.reduce((s, r) => s + r.applied, 0);
           const remaining = rows.reduce((s, r) => s + r.remaining, 0);
@@ -358,10 +362,10 @@ export default function Home() {
             .due;
           const hasOverdue = rows.some((r) => r.due < today());
           return {
-            id: `company-${company}`,
+            id: `company-${company}-${monthKey}`,
             company,
             title: `${new Set(rows.map((r) => r.contractId)).size} اتفاق`,
-            label: `إجمالي مستحقات الشركة (${rows.length} قسط)`,
+            label: `قسط ${monthsAr[Number(monthKey.slice(5, 7)) - 1]} ${monthKey.slice(0, 4)} (${rows.length} بند)`,
             due,
             amount,
             applied,
@@ -373,7 +377,8 @@ export default function Home() {
                 : "مستحق",
           };
         })
-        .filter(Boolean),
+        .sort((a, b) => a.due.localeCompare(b.due) || a.company.localeCompare(b.company, "ar"));
+    },
     [companies, allRows],
   );
   const reportContracts = useMemo(
