@@ -217,7 +217,21 @@ const accountRowsForCompany = (companyContracts: Contract[]) => {
   if (!months.length) return raw;
   const depositTotal = agreementDeposits.reduce((sum, row) => sum + row.amount, 0);
   const installmentTotal = monthlyRows.reduce((sum, row) => sum + row.amount, 0);
-  const monthlyTarget = Math.max(0, installmentTotal - depositTotal) / months.length;
+  const remainingForInstallments = Math.max(0, installmentTotal - depositTotal);
+  const roundedCandidate =
+    Math.round(remainingForInstallments / months.length / 1000) * 1000;
+  const roundedRegularInstallment =
+    months.length > 1 && roundedCandidate * (months.length - 1) > remainingForInstallments
+      ? Math.floor(remainingForInstallments / months.length / 1000) * 1000
+      : roundedCandidate;
+  const monthTargets = new Map(
+    months.map((month, index) => [
+      month,
+      index === months.length - 1
+        ? remainingForInstallments - roundedRegularInstallment * (months.length - 1)
+        : roundedRegularInstallment,
+    ]),
+  );
 
   return raw.map((row) => {
     if (!monthlyRows.some((item) => item.id === row.id)) return row;
@@ -226,7 +240,9 @@ const accountRowsForCompany = (companyContracts: Contract[]) => {
     const originalMonthTotal = monthRows.reduce((sum, item) => sum + item.amount, 0);
     return {
       ...row,
-      amount: originalMonthTotal ? (row.amount / originalMonthTotal) * monthlyTarget : 0,
+      amount: originalMonthTotal
+        ? (row.amount / originalMonthTotal) * (monthTargets.get(month) || 0)
+        : 0,
     };
   });
 };
