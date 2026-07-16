@@ -306,7 +306,7 @@ export default function Home() {
         return contracts
           .filter((c) => c.company === company)
           .flatMap((c) =>
-            c.installments.map((i) => ({
+            installmentsForCompanyReport(c).map((i) => ({
               ...i,
               company,
               contractId: c.id,
