@@ -473,6 +473,25 @@ export default function Home() {
     }));
     setModal(null);
   }
+  function saveCompanyContractDeposit(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    const fd = new FormData(e.currentTarget);
+    const amount = Number(fd.get("amount"));
+    if (!selectedCompany || amount <= 0) return;
+    setCompanyPayments((current) => ({
+      ...current,
+      [selectedCompany]: [
+        ...(current[selectedCompany] || []),
+        {
+          id: uid(),
+          date: String(fd.get("date")),
+          amount,
+          note: String(fd.get("note") || "دفعة تعاقد على المشاع"),
+        },
+      ],
+    }));
+    setModal(null);
+  }
   function deletePayment(company: string, target: Payment) {
     if (!confirm("حذف دفعة السداد؟ سيتم إلغاء أثرها من جميع التقارير وجدول الأقساط."))
       return;
@@ -1154,12 +1173,10 @@ export default function Home() {
         )}
       </main>
 
-      {(modal === "newCompanyContract" || modal === "agreement" || modal === "companyDeposit") && (
+      {(modal === "newCompanyContract" || modal === "agreement") && (
         <Modal
           title={
-            modal === "companyDeposit"
-              ? `دفعة تعاقد على المشاع — ${selectedCompany}`
-              : modal === "agreement" && selectedCompany
+            modal === "agreement" && selectedCompany
               ? `اتفاق جديد — ${selectedCompany}`
               : "عقد جديد مع شركة جديدة"
           }
@@ -1167,13 +1184,40 @@ export default function Home() {
         >
           <AgreementForm
             defaultCompany={modal === "newCompanyContract" ? "" : selectedCompany}
-            initialAgreementType={modal === "companyDeposit" ? "companyDeposit" : "campaign"}
             onSave={(c) => {
               setContracts((v) => [...v, c]);
               setSelectedCompany(c.company);
               setModal(null);
             }}
           />
+        </Modal>
+      )}
+
+      {modal === "companyDeposit" && selectedCompany && (
+        <Modal
+          title={`تسجيل دفعة تعاقد — ${selectedCompany}`}
+          close={() => setModal(null)}
+        >
+          <form className="form" onSubmit={saveCompanyContractDeposit}>
+            <div className="balance-box">
+              هذه دفعة سداد عامة تخصم من حساب الشركة، ثم يوزعها النظام على أقدم الاستحقاقات دون ربطها بإعلان معين.
+            </div>
+            <div className="form-grid">
+              <label>
+                قيمة دفعة التعاقد
+                <input name="amount" type="number" min="1" step="0.01" required />
+              </label>
+              <label>
+                تاريخ السداد
+                <input name="date" type="date" defaultValue={today()} required />
+              </label>
+              <label className="wide">
+                البيان / الملاحظات
+                <input name="note" defaultValue="دفعة تعاقد على المشاع" />
+              </label>
+            </div>
+            <button className="primary submit">تسجيل الدفعة وخصمها من حساب الشركة</button>
+          </form>
         </Modal>
       )}
 
@@ -1908,11 +1952,9 @@ function AgreementCard({
 
 function AgreementForm({
   defaultCompany,
-  initialAgreementType = "campaign",
   onSave,
 }: {
   defaultCompany: string;
-  initialAgreementType?: "campaign" | "printing" | "companyDeposit";
   onSave: (c: Contract) => void;
 }) {
   const blankInst = (): Installment => ({
@@ -1928,7 +1970,7 @@ function AgreementForm({
   const [displayEnd, setDisplayEnd] = useState("");
   const [mode, setMode] = useState<"auto" | "manual">("auto");
   const [manual, setManual] = useState<Installment[]>([blankInst()]);
-  const [agreementType, setAgreementType] = useState<"campaign" | "printing" | "companyDeposit">(initialAgreementType);
+  const [agreementType, setAgreementType] = useState<"campaign" | "printing">("campaign");
   const billingMonths = (start: string, end: string) => {
     if (!start || !end || end < start) return 0;
     const a = new Date(start + "T12:00:00");
@@ -1971,29 +2013,6 @@ function AgreementForm({
           due: created,
           amount,
           kind: "installment",
-        }],
-        payments: [],
-      });
-      return;
-    }
-    if (agreementType === "companyDeposit") {
-      const amount = Number(fd.get("companyDepositAmount") || 0);
-      const due = String(fd.get("companyDepositDue") || today());
-      if (amount <= 0 || !due) return;
-      onSave({
-        id: uid(),
-        company: defaultCompany,
-        title: "دفعة تعاقد على المشاع",
-        start: today(),
-        notes: String(fd.get("companyDepositNotes") || ""),
-        agreementType: "companyDeposit",
-        signs: [],
-        installments: [{
-          id: uid(),
-          label: "دفعة تعاقد على المشاع",
-          due,
-          amount,
-          kind: "deposit",
         }],
         payments: [],
       });
@@ -2077,9 +2096,6 @@ function AgreementForm({
           <button type="button" className={agreementType === "printing" ? "active" : ""} onClick={() => setAgreementType("printing")}>
             عقد طباعة
           </button>
-          <button type="button" className={agreementType === "companyDeposit" ? "active" : ""} onClick={() => setAgreementType("companyDeposit")}>
-            دفعة تعاقد على المشاع
-          </button>
         </div>
       )}
       {agreementType === "printing" ? (
@@ -2098,27 +2114,6 @@ function AgreementForm({
             </label>
           </div>
           <button className="primary submit">حفظ عقد الطباعة وإضافة الالتزام</button>
-        </>
-      ) : agreementType === "companyDeposit" ? (
-        <>
-          <div className="balance-box">
-            تُسجل كاستحقاق عام على حساب {defaultCompany} دون ربطها بإعلان، وتدخل في التوزيع حسب تاريخ استحقاقها مع باقي حسابات الشركة.
-          </div>
-          <div className="form-grid">
-            <label>
-              قيمة دفعة التعاقد
-              <input name="companyDepositAmount" type="number" min="1" step="0.01" required />
-            </label>
-            <label>
-              تاريخ الاستحقاق
-              <input name="companyDepositDue" type="date" defaultValue={today()} required />
-            </label>
-            <label className="wide">
-              البيان / الملاحظات
-              <input name="companyDepositNotes" placeholder="مثال: دفعة تعاقد عامة طبقًا للاتفاق مع الشركة" />
-            </label>
-          </div>
-          <button className="primary submit">حفظ دفعة التعاقد على حساب الشركة</button>
         </>
       ) : <>
       <div className="form-grid">
