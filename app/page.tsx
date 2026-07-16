@@ -707,7 +707,13 @@ export default function Home() {
                   عرض الكل ←
                 </button>
               </div>
-              <DueTable rows={companyDueRows.slice(0, 6) as any[]} />
+              <DueTable
+                rows={companyDueRows.filter(
+                  (row) =>
+                    row.due.slice(0, 7) ===
+                    companyDueRows[0]?.due.slice(0, 7),
+                ) as any[]}
+              />
             </section>
           </>
         )}
