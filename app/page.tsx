@@ -232,8 +232,12 @@ export default function Home() {
   >("dashboard");
   const [year, setYear] = useState(new Date().getFullYear());
   const [modal, setModal] = useState<
-    "newCompanyContract" | "agreement" | "payment" | null
+    "newCompanyContract" | "agreement" | "payment" | "editPayment" | null
   >(null);
+  const [editingPayment, setEditingPayment] = useState<{
+    company: string;
+    payment: Payment;
+  } | null>(null);
   const [selected, setSelected] = useState<string>("");
   const [selectedCompany, setSelectedCompany] = useState<string>("");
   const [reportCompany, setReportCompany] = useState<string>("");
@@ -465,13 +469,7 @@ export default function Home() {
       return;
     setCompanyPayments((current) => {
       const remaining = (current[company] || []).filter(
-        (payment) =>
-          payment.id !== target.id &&
-          !(
-            payment.amount === target.amount &&
-            payment.date === target.date &&
-            (payment.note || "") === (target.note || "")
-          ),
+        (payment) => payment.id !== target.id,
       );
       const next = { ...current };
       if (remaining.length) next[company] = remaining;
@@ -479,6 +477,36 @@ export default function Home() {
       localStorage.setItem("ad-company-payments-v1", JSON.stringify(next));
       return next;
     });
+  }
+  function startEditingPayment(company: string, payment: Payment) {
+    setEditingPayment({ company, payment });
+    setModal("editPayment");
+  }
+  function savePaymentEdits(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    if (!editingPayment) return;
+    const fd = new FormData(e.currentTarget);
+    const nextCompany = String(fd.get("company"));
+    const amount = Number(fd.get("amount"));
+    if (!nextCompany || amount <= 0) return;
+    const updated: Payment = {
+      ...editingPayment.payment,
+      date: String(fd.get("date")),
+      amount,
+      note: String(fd.get("note") || ""),
+    };
+    setCompanyPayments((current) => {
+      const next = { ...current };
+      const sourcePayments = (next[editingPayment.company] || []).filter(
+        (payment) => payment.id !== editingPayment.payment.id,
+      );
+      if (sourcePayments.length) next[editingPayment.company] = sourcePayments;
+      else delete next[editingPayment.company];
+      next[nextCompany] = [...(next[nextCompany] || []), updated];
+      return next;
+    });
+    setEditingPayment(null);
+    setModal(null);
   }
   function resetCompanyPayments(company: string) {
     const amount = (companyPayments[company] || []).reduce(
@@ -1130,6 +1158,8 @@ export default function Home() {
               payments={companyPayments}
               year={year}
               selectedCompany={reportCompany}
+              onEdit={startEditingPayment}
+              onDelete={deletePayment}
             />
           </section>
         )}
@@ -1152,6 +1182,42 @@ export default function Home() {
               setModal(null);
             }}
           />
+        </Modal>
+      )}
+
+      {modal === "editPayment" && editingPayment && (
+        <Modal
+          title="تعديل دفعة السداد"
+          close={() => {
+            setEditingPayment(null);
+            setModal(null);
+          }}
+        >
+          <form className="form" onSubmit={savePaymentEdits}>
+            <div className="form-grid">
+              <label>
+                شركة الإعلانات
+                <select name="company" defaultValue={editingPayment.company} required>
+                  {companies.map((company) => (
+                    <option key={company} value={company}>{company}</option>
+                  ))}
+                </select>
+              </label>
+              <label>
+                تاريخ السداد
+                <input name="date" type="date" defaultValue={editingPayment.payment.date} required />
+              </label>
+              <label>
+                مبلغ الدفعة
+                <input name="amount" type="number" min="1" step="0.01" defaultValue={editingPayment.payment.amount} required />
+              </label>
+              <label className="wide">
+                البيان / الملاحظة
+                <textarea name="note" rows={3} defaultValue={editingPayment.payment.note} placeholder="مثال: دفعة سداد" />
+              </label>
+            </div>
+            <button className="primary submit" type="submit">حفظ التعديلات</button>
+          </form>
         </Modal>
       )}
       {modal === "payment" && (
@@ -2527,11 +2593,15 @@ function PaymentsReport({
   payments,
   year,
   selectedCompany,
+  onEdit,
+  onDelete,
 }: {
   companies: string[];
   payments: Record<string, Payment[]>;
   year: number;
   selectedCompany: string;
+  onEdit: (company: string, payment: Payment) => void;
+  onDelete: (company: string, payment: Payment) => void;
 }) {
   const rows = companies
     .flatMap((company) =>
@@ -2597,6 +2667,7 @@ function PaymentsReport({
             <th>تاريخ السداد</th>
             <th>البيان / الملاحظة</th>
             <th>المبلغ المصروف</th>
+            <th className="print-hide">إجراءات</th>
           </tr>
         </thead>
         <tbody>
@@ -2607,11 +2678,15 @@ function PaymentsReport({
                 <td>{row.date}</td>
                 <td>{row.note || "دفعة سداد"}</td>
                 <td>{money(row.amount)}</td>
+                <td className="payment-actions print-hide">
+                  <button className="edit-payment" type="button" onClick={() => onEdit(row.company, row)}>تعديل</button>
+                  <button className="delete-payment" type="button" onClick={() => onDelete(row.company, row)}>حذف</button>
+                </td>
               </tr>
             ))
           ) : (
             <tr>
-              <td colSpan={selectedCompany ? 3 : 4}>لا توجد دفعات سداد مصروفة خلال هذه السنة.</td>
+              <td colSpan={selectedCompany ? 4 : 5}>لا توجد دفعات سداد مصروفة خلال هذه السنة.</td>
             </tr>
           )}
           {rows.length > 0 && (
@@ -2620,6 +2695,7 @@ function PaymentsReport({
                 {selectedCompany ? "إجمالي دفعات الشركة" : "إجمالي دفعات كل الشركات"}
               </td>
               <td>{money(grandTotal)}</td>
+              <td className="print-hide" />
             </tr>
           )}
         </tbody>
