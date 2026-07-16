@@ -670,7 +670,8 @@ export default function Home() {
                     key={`${m.year}-${m.month}`}
                   >
                     <div className="month-name">{m.name} <small>{m.year}</small></div>
-                    <b>{money(m.due)}</b>
+                    <small>المتبقي</small>
+                    <b>{money(m.remaining)}</b>
                     <div className="bar">
                       <i
                         style={{
@@ -680,7 +681,7 @@ export default function Home() {
                     </div>
                     <small>
                       {m.due
-                        ? `متبقي ${money(m.remaining)}`
+                        ? `أصل ${money(m.due)} · مدفوع ${money(m.paid)}`
                         : "لا توجد التزامات"}
                     </small>
                   </article>
