@@ -2122,11 +2122,13 @@ function AgreementForm({
     const fd = new FormData(e.currentTarget);
     if (agreementType === "printing") {
       const amount = Number(fd.get("printingAmount") || 0);
-      if (amount <= 0) return;
+      const company = defaultCompany || String(fd.get("printingCompany") || "");
+      const due = String(fd.get("printingDate") || today());
+      if (!company || amount <= 0 || !due) return;
       const created = today();
       onSave({
         id: uid(),
-        company: defaultCompany,
+        company,
         title: "عقد طباعة",
         start: created,
         notes: String(fd.get("printingNotes") || ""),
@@ -2135,7 +2137,7 @@ function AgreementForm({
         installments: [{
           id: uid(),
           label: "عقد طباعة",
-          due: created,
+          due,
           amount,
           kind: "installment",
         }],
@@ -2213,29 +2215,41 @@ function AgreementForm({
   }
   return (
     <form onSubmit={submit} className="form">
-      {defaultCompany && (
-        <div className="tabs">
-          <button type="button" className={agreementType === "campaign" ? "active" : ""} onClick={() => setAgreementType("campaign")}>
-            اتفاق حملة إعلانية
-          </button>
-          <button type="button" className={agreementType === "printing" ? "active" : ""} onClick={() => setAgreementType("printing")}>
-            عقد طباعة
-          </button>
-        </div>
-      )}
+      <div className="tabs contract-type-tabs" aria-label="نوع العقد">
+        <button type="button" className={agreementType === "campaign" ? "active" : ""} onClick={() => setAgreementType("campaign")}>
+          عقد حملة إعلانية
+        </button>
+        <button type="button" className={agreementType === "printing" ? "active" : ""} onClick={() => setAgreementType("printing")}>
+          عقد طباعة
+        </button>
+      </div>
       {agreementType === "printing" ? (
         <>
           <div className="balance-box">
-            يُسجل المبلغ كالتزام عام على شركة آثار تجاه {defaultCompany}، ويُضاف إلى إجمالي حساب الشركة في شهر إنشائه دون ربطه بحملة معينة.
+            يُسجل المبلغ كالتزام طباعة عام على شركة آثار، ويُضاف إلى إجمالي حساب شركة الإعلان في شهر الاستحقاق دون ربطه بحملة معينة.
           </div>
           <div className="form-grid">
             <label>
-              المبلغ
+              شركة الإعلان
+              <input
+                name="printingCompany"
+                required
+                defaultValue={defaultCompany}
+                readOnly={!!defaultCompany}
+                placeholder="اسم شركة الإعلان"
+              />
+            </label>
+            <label>
+              قيمة عقد الطباعة
               <input name="printingAmount" type="number" min="1" required />
+            </label>
+            <label>
+              تاريخ الاستحقاق
+              <input name="printingDate" type="date" defaultValue={today()} required />
             </label>
             <label className="wide">
               ملاحظات
-              <input name="printingNotes" />
+              <input name="printingNotes" placeholder="تفاصيل أعمال الطباعة (اختياري)" />
             </label>
           </div>
           <button className="primary submit">حفظ عقد الطباعة وإضافة الالتزام</button>
