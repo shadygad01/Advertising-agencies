@@ -1126,8 +1126,8 @@ export default function Home() {
             )}
             <div className="panel-head report-section-label">
               <div>
-                <h2>جدول الأقساط المتبقية بعد السداد</h2>
-                <p>المبالغ المتبقية بعد توزيع دفعات الشركة على أقدم الأقساط</p>
+                <h2>حالة الأقساط بعد السداد</h2>
+                <p>تظهر الأقساط المسددة في شهر استحقاقها، مع عرض المتبقي من الأقساط غير المسددة</p>
               </div>
             </div>
             <div className="panel report-table">
@@ -1144,15 +1144,18 @@ export default function Home() {
                 <tbody>
                   {reportContracts.map((c) => {
                     const rows = allRows.filter((row) => row.contractId === c.id);
-                    const vals = fiscalMonths(year).map((m) =>
-                      rows
-                        .filter(
-                          (r) =>
-                            Number(r.due.slice(0, 4)) === m.year &&
-                            Number(r.due.slice(5, 7)) === m.month + 1,
-                        )
-                        .reduce((s, r) => s + r.remaining, 0),
-                    );
+                    const vals = fiscalMonths(year).map((m) => {
+                      const monthRows = rows.filter(
+                        (r) =>
+                          Number(r.due.slice(0, 4)) === m.year &&
+                          Number(r.due.slice(5, 7)) === m.month + 1,
+                      );
+                      return {
+                        due: monthRows.reduce((s, r) => s + r.amount, 0),
+                        paid: monthRows.reduce((s, r) => s + r.applied, 0),
+                        remaining: monthRows.reduce((s, r) => s + r.remaining, 0),
+                      };
+                    });
                     return (
                       <tr key={c.id}>
                         <td>
@@ -1163,13 +1166,29 @@ export default function Home() {
                         </td>
                         {vals.map((v, i) => (
                           <td key={i}>
-                            {v ? new Intl.NumberFormat("ar-EG").format(v) : "—"}
+                            {!v.due ? (
+                              "—"
+                            ) : v.remaining === 0 ? (
+                              <span className="paid-installment">
+                                <b>مسدد</b>
+                                <small>{new Intl.NumberFormat("ar-EG").format(v.paid)}</small>
+                              </span>
+                            ) : (
+                              <>
+                                {new Intl.NumberFormat("ar-EG").format(v.remaining)}
+                                {v.paid > 0 && (
+                                  <small className="partial-installment">
+                                    مسدد {new Intl.NumberFormat("ar-EG").format(v.paid)}
+                                  </small>
+                                )}
+                              </>
+                            )}
                           </td>
                         ))}
                         <td>
                           <b>
                             {new Intl.NumberFormat("ar-EG").format(
-                              vals.reduce((s, v) => s + v, 0),
+                              vals.reduce((s, v) => s + v.remaining, 0),
                             )}
                           </b>
                         </td>
