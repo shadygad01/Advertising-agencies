@@ -3222,7 +3222,7 @@ function CompanyInstallmentDistribution({
             {fiscalMonths(year).map((m) => (
               <th key={m.label}>{m.label}</th>
             ))}
-            <th>إجمالي السنة</th>
+            <th>إجمالي المتبقي</th>
           </tr>
         </thead>
         <tbody>
@@ -3256,30 +3256,62 @@ function CompanyInstallmentDistribution({
               ))}
               <td>
                 <b>{money(r.vals.reduce((s, v) => s + v.remaining, 0))}</b>
+                {r.vals.reduce((s, v) => s + v.paid, 0) > 0 && (
+                  <small className="partial-installment">
+                    مسدد {money(r.vals.reduce((s, v) => s + v.paid, 0))}
+                  </small>
+                )}
               </td>
             </tr>
           ))}
           <tr className="total-row">
             <td>إجمالي الشهر</td>
             {fiscalMonths(year).map((m, i) => {
-              const v = rows.reduce((s, r) => s + r.vals[i].remaining, 0);
+              const monthTotal = rows.reduce(
+                (total, row) => ({
+                  due: total.due + row.vals[i].due,
+                  paid: total.paid + row.vals[i].paid,
+                  remaining: total.remaining + row.vals[i].remaining,
+                }),
+                { due: 0, paid: 0, remaining: 0 },
+              );
               return (
                 <td key={m.label}>
-                  {v
-                    ? new Intl.NumberFormat("ar-EG", {
+                  {!monthTotal.due ? (
+                    "—"
+                  ) : monthTotal.remaining === 0 ? (
+                    <span className="paid-installment">
+                      <b>مسدد</b>
+                      <small>{new Intl.NumberFormat("ar-EG").format(monthTotal.paid)}</small>
+                    </span>
+                  ) : (
+                    <>
+                      {new Intl.NumberFormat("ar-EG", {
                         maximumFractionDigits: 0,
-                      }).format(v)
-                    : "—"}
+                      }).format(monthTotal.remaining)}
+                      {monthTotal.paid > 0 && (
+                        <small className="partial-installment">
+                          مسدد {new Intl.NumberFormat("ar-EG").format(monthTotal.paid)}
+                        </small>
+                      )}
+                    </>
+                  )}
                 </td>
               );
             })}
             <td>
-              {money(
+              <b>{money(
                 rows.reduce(
                   (sum, r) => sum + r.vals.reduce((s, v) => s + v.remaining, 0),
                   0,
                 ),
-              )}
+              )}</b>
+              <small className="partial-installment">
+                مسدد {money(rows.reduce(
+                  (sum, r) => sum + r.vals.reduce((s, v) => s + v.paid, 0),
+                  0,
+                ))}
+              </small>
             </td>
           </tr>
         </tbody>
