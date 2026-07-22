@@ -1031,6 +1031,7 @@ export default function Home() {
             <CompanyInstallmentDistribution
               companies={reportCompany ? [reportCompany] : companies}
               contracts={contracts}
+              payments={companyPayments}
               year={year}
             />
             {reportCompany && (
@@ -3169,29 +3170,49 @@ function PaymentsReport({
 function CompanyInstallmentDistribution({
   companies,
   contracts,
+  payments,
   year,
 }: {
   companies: string[];
   contracts: Contract[];
+  payments: Record<string, Payment[]>;
   year: number;
 }) {
-  const values = (company: string) =>
-    fiscalMonths(year).map(({ month, year: itemYear }) =>
-      accountRowsForCompany(contracts.filter((c) => c.company === company))
-        .filter(
-          (row) =>
-            Number(row.due.slice(0, 4)) === itemYear &&
-            Number(row.due.slice(5, 7)) === month + 1,
-        )
-        .reduce((sum, row) => sum + row.amount, 0),
+  const values = (company: string) => {
+    let availablePayment = (payments[company] || []).reduce(
+      (sum, payment) => sum + payment.amount,
+      0,
     );
+    const allocated = accountRowsForCompany(
+      contracts.filter((c) => c.company === company),
+    )
+      .sort((a, b) => a.due.localeCompare(b.due))
+      .map((row) => {
+        const paid = Math.min(availablePayment, row.amount);
+        availablePayment -= paid;
+        return { ...row, paid, remaining: row.amount - paid };
+      });
+
+    return fiscalMonths(year).map(({ month, year: itemYear }) => {
+      const monthRows = allocated.filter(
+        (row) =>
+          Number(row.due.slice(0, 4)) === itemYear &&
+          Number(row.due.slice(5, 7)) === month + 1,
+      );
+      return {
+        due: monthRows.reduce((sum, row) => sum + row.amount, 0),
+        paid: monthRows.reduce((sum, row) => sum + row.paid, 0),
+        remaining: monthRows.reduce((sum, row) => sum + row.remaining, 0),
+      };
+    });
+  };
   const rows = companies.map((company) => ({ company, vals: values(company) }));
   return (
     <div className="panel report-table print-keep">
       <div className="panel-head">
         <div>
           <h2>توزيع الأقساط الشهرية حسب الشركات</h2>
-          <p>الشركات المكوّنة لإجمالي الأقساط المطلوبة في كل شهر</p>
+          <p>المتبقي المطلوب من كل شركة بعد خصم الدفعات، مع إظهار الأشهر المسددة</p>
         </div>
       </div>
       <table>
@@ -3212,22 +3233,36 @@ function CompanyInstallmentDistribution({
               </td>
               {r.vals.map((v, i) => (
                 <td key={i}>
-                  {v
-                    ? new Intl.NumberFormat("ar-EG", {
+                  {!v.due ? (
+                    "—"
+                  ) : v.remaining === 0 ? (
+                    <span className="paid-installment">
+                      <b>مسدد</b>
+                      <small>{new Intl.NumberFormat("ar-EG").format(v.paid)}</small>
+                    </span>
+                  ) : (
+                    <>
+                      {new Intl.NumberFormat("ar-EG", {
                         maximumFractionDigits: 0,
-                      }).format(v)
-                    : "—"}
+                      }).format(v.remaining)}
+                      {v.paid > 0 && (
+                        <small className="partial-installment">
+                          مسدد {new Intl.NumberFormat("ar-EG").format(v.paid)}
+                        </small>
+                      )}
+                    </>
+                  )}
                 </td>
               ))}
               <td>
-                <b>{money(r.vals.reduce((s, v) => s + v, 0))}</b>
+                <b>{money(r.vals.reduce((s, v) => s + v.remaining, 0))}</b>
               </td>
             </tr>
           ))}
           <tr className="total-row">
             <td>إجمالي الشهر</td>
             {fiscalMonths(year).map((m, i) => {
-              const v = rows.reduce((s, r) => s + r.vals[i], 0);
+              const v = rows.reduce((s, r) => s + r.vals[i].remaining, 0);
               return (
                 <td key={m.label}>
                   {v
@@ -3241,7 +3276,7 @@ function CompanyInstallmentDistribution({
             <td>
               {money(
                 rows.reduce(
-                  (sum, r) => sum + r.vals.reduce((s, v) => s + v, 0),
+                  (sum, r) => sum + r.vals.reduce((s, v) => s + v.remaining, 0),
                   0,
                 ),
               )}
