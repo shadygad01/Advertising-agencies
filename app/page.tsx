@@ -950,7 +950,8 @@ export default function Home() {
                         (item) => item.company === selectedCompany,
                       )}
                       onDelete={() => {
-                        if (!confirm("حذف هذا الاتفاق؟")) return;
+                        const isDeposit = c.agreementType === "companyDeposit";
+                        if (!confirm(isDeposit ? "حذف دفعة التعاقد؟ سيتم إلغاء أثرها من التقارير." : "حذف هذا الاتفاق؟")) return;
                         setContracts((v) => v.filter((x) => x.id !== c.id));
                       }}
                     />
@@ -1932,7 +1933,7 @@ function AgreementCard({
             </button>
           )}
           <button className="danger-link" onClick={onDelete}>
-            حذف الاتفاق
+            {isCompanyDeposit ? "حذف دفعة التعاقد" : "حذف الاتفاق"}
           </button>
         </div>
       </div>
@@ -2778,6 +2779,29 @@ function ContractDepositEditForm({
   const existingDepositTotal = deposits.reduce((sum, item) => sum + item.amount, 0);
   const firstDue = normal[0]?.due || today();
 
+  function removeDeposit(targetId: string) {
+    const target = deposits.find((item) => item.id === targetId);
+    if (!target) return;
+    if (!confirm(`حذف دفعة التعاقد بقيمة ${money(target.amount)}؟ ستُعاد قيمتها إلى أقساط الإعلان.`)) return;
+
+    const remainingDeposits = deposits.filter((item) => item.id !== targetId);
+    const amountForInstallments = agreementTotal - remainingDeposits.reduce(
+      (sum, item) => sum + item.amount,
+      0,
+    );
+    const amounts = splitRoundedInstallments(amountForInstallments, normal.length);
+    const adjusted = normal.map((item, index) => ({
+      ...item,
+      label: `القسط ${index + 1}`,
+      amount: amounts[index],
+    }));
+
+    onSave({
+      ...contract,
+      installments: [...remainingDeposits, ...adjusted],
+    });
+  }
+
   function save(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     const fd = new FormData(e.currentTarget);
@@ -2833,6 +2857,24 @@ function ContractDepositEditForm({
       <p className="form-hint">
         قيمة الإعلان {money(agreementTotal)} · أول قسط {firstDue} · عدد الأقساط {normal.length}
       </p>
+      {deposits.length > 0 && (
+        <div className="deposit-list">
+          <strong>دفعات التعاقد المسجلة</strong>
+          {deposits.map((deposit) => (
+            <div key={deposit.id} className="deposit-list-row">
+              <span>{deposit.due}</span>
+              <b>{money(deposit.amount)}</b>
+              <button
+                className="delete-payment"
+                type="button"
+                onClick={() => removeDeposit(deposit.id)}
+              >
+                حذف الدفعة
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
       <button className="primary submit">تسجيل الدفعة وإعادة حساب أقساط الإعلان</button>
     </form>
   );
