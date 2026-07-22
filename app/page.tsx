@@ -956,6 +956,17 @@ export default function Home() {
                       }}
                     />
                   ))}
+                <div className="company-paid-summary">
+                  <small>إجمالي المدفوع للشركة</small>
+                  <b>
+                    {money(
+                      (companyPayments[selectedCompany] || []).reduce(
+                        (sum, payment) => sum + payment.amount,
+                        0,
+                      ),
+                    )}
+                  </b>
+                </div>
               </>
             )}
           </section>
@@ -1901,14 +1912,6 @@ function AgreementCard({
     "period" | "firstDue" | "installmentCount" | "contractDeposit" | "depositDue" | "quantity" | null
   >(null);
   const total = c.installments.reduce((s, i) => s + i.amount, 0);
-  const companyPaymentStore: Record<string, Payment[]> =
-    typeof window === "undefined"
-      ? {}
-      : JSON.parse(localStorage.getItem("ad-company-payments-v1") || "{}");
-  const paid = (companyPaymentStore[c.company] || []).reduce(
-    (s, p) => s + p.amount,
-    0,
-  );
   const sign = c.signs[0];
   const isPrinting = c.agreementType === "printing";
   const isCompanyDeposit = c.agreementType === "companyDeposit";
@@ -1995,10 +1998,6 @@ function AgreementCard({
           <b>
             {c.displayStart || sign?.start} — {sign?.end}
           </b>
-        </div>
-        <div>
-          <small>إجمالي المدفوع للشركة</small>
-          <b>{money(paid)}</b>
         </div>
         <div>
           <small>قيمة هذا الاتفاق</small>
